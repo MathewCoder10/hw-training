@@ -1,0 +1,40 @@
+Topics Covered Today:
+
+    selenium: A library for automating web browsers, often used for web scraping, testing, and automating web interactions.
+
+    playwright: A Python library to automate web browsers for web scraping, testing, and more, similar to Selenium but with enhanced capabilities.
+
+    pika: A Python library for interacting with RabbitMQ, a messaging broker for building real-time communication systems.
+
+    logging: A module for generating log messages in your Python applications, useful for debugging and tracking application behavior.
+
+    ast (Abstract Syntax Tree): A module that allows Python source code to be parsed into its Abstract Syntax Tree, useful for analyzing and modifying code structure.
+
+    datetime: A module for working with dates and times in Python, providing functionality for date/time arithmetic, formatting, and comparisons.
+
+    urllib: A module for working with URLs and handling tasks like fetching data from the web and parsing URLs.
+
+    time: A module providing time-related functions, including sleeping the program, measuring time intervals, and formatting times.
+
+    xml: A standard library for working with XML data, including parsing and creating XML documents.
+
+    lxml: A library for parsing and handling XML and HTML data, often used for its high performance and ease of use.
+
+    base64: A module for encoding and decoding binary data in base64 format, which is commonly used for data transfer or storing images in text formats.
+
+    os: A module that provides functions to interact with the operating system, including file and directory operations, environment variables, and system commands.
+
+    random: A module for generating random numbers, making random selections, and shuffling data.
+
+    ftplib: A library for working with FTP (File Transfer Protocol) servers, allowing file uploads, downloads, and server interactions.
+
+    dropbox: A Python SDK for interacting with the Dropbox cloud storage service, allowing file uploads, downloads, and sharing links.
+
+    boto3: The Amazon Web Services (AWS) SDK for Python, enabling interaction with AWS services like S3, EC2, and Lambda.
+
+    cloudscraper: A Python library used to bypass anti-bot protections (such as CAPTCHA) in web scraping scenarios.
+
+    js2py: A library that allows you to execute JavaScript code within a Python environment.
+
+    ipython: An interactive Python shell that enhances the standard Python shell with additional features, including better debugging, introspection, and shell-like features.
+

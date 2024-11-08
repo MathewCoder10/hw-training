@@ -1,0 +1,37 @@
+Meeting with Team Heads and HR:
+Received a clear overview of the company’s structure, functioning, objectives, and vision. 
+Topics covered today:
+1. Open Source Community: (e.g., GitHub, Apache, Linux)
+
+2. What is the Internet? (e.g., World Wide Web, TCP/IP, DNS)
+
+3. Server/Virtual Servers: (e.g., Dedicated servers, Virtual Machines, AWS EC2)
+
+4. HTTP/HTTPS: (e.g., HTTP for unsecured communication, HTTPS for secure communication)
+
+5. HTTP Status Codes: (e.g., 200 OK, 404 Not Found, 500 Internal Server Error)
+
+6. APIs: (Application Programming Interface) and its brief explanation.
+7. Git:
+
+    7.1. Git Commands: (e.g., git init, git add, git clone, git commit)
+    7.2. CI/CD: (e.g., Jenkins, GitHub Actions)
+    7.3. Effective Use of Git: (e.g., Branching strategies, Commit messages, Merging)
+
+8. Data Formats:
+
+    8.1. JSON: (e.g., {"name": "John", "age": 30})
+    8.2. CSV, TSV: (e.g., name, age\n John, 30)
+    8.3. XML: (e.g., <person><name>John</name><age>30</age></person>)
+
+9. Introduction to Linux:
+
+    9.1. Linux OS and Basic Commands: (e.g., ls, pwd, cd, mkdir)
+    9.2. Package Installers:
+        apt-get: (e.g., sudo apt-get install python3)
+        pip: (e.g., pip install numpy)
+    9.3. Terminal Text Editors:
+        nano: (e.g., nano file.txt)
+        vim: (e.g., vim file.txt)
+    9.4. IDE: (e.g., Sublime Text, VSCode)
+    9.5. Virtual Environment Setup: (e.g., python3 -m venv myenv)

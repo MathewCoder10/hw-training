@@ -1,0 +1,22 @@
+Topics covered today:
+
+Python Basics
+
+    Practiced indentation using spaces and tabs.
+    Worked with basic data types: str, int, float, bool, list, dict, tuple, set, None.
+    Performed basic operations like arithmetic, comparison, and logical operations.
+    Used if-else statements for decision-making and loops for iteration.
+    Created functions with positional arguments (args) and keyword arguments (kwargs).
+    Used return and yield in functions.
+    Studied object-oriented programming (OOP), including classes, objects, inheritance, and encapsulation.
+    Learned about the self argument and the constructor (__init__) and destructor (__del__) methods.
+    Worked with file operations (open, read, write).
+    Handled errors using try and except blocks.
+    Practiced string formatting using f-strings, .format(), and %.
+    Imported modules using import and from-import.
+    Understood Python memory references and variable scope.
+    Used list comprehensions for concise and efficient list creation.
+    Managed exceptions and errors in the code.
+    Focused on code readability, optimization, and reliability.
+    Followed Python's PEP8 standards for clean, readable code.
+    Applied best coding practices for writing efficient and maintainable code.
