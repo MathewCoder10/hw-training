@@ -1,0 +1,22 @@
+{
+    "emp_name": "Mathew George",
+    "emp_id": 1,
+    "login_time": "2024-11-15 15:17",
+    "logout_time": "2024-11-15 15:17",
+    "tasks": [
+        {
+            "task_title": "Task 1",
+            "task_description": "Employee Tracking Task finished",
+            "start_time": "2024-11-15 15:17",
+            "end_time": "2024-11-15 15:17",
+            "task_success": true
+        },
+        {
+            "task_title": "Task 2",
+            "task_description": "Employee Tracking Task doing",
+            "start_time": "2024-11-15 15:17",
+            "end_time": "2024-11-15 15:17",
+            "task_success": true
+        }
+    ]
+}
