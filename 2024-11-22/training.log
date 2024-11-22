@@ -1,0 +1,11 @@
+Topics Covered Today:
+Web scraping using Parsel and python requests
+    Request handling
+    Response handling
+    Xpaths
+    Lxml
+    Cookies, session
+    Certificate verification
+    Proxies - need of both http and https proxy in proxies dict
+    Exceptions
+    Better coding with python requests
