@@ -1,0 +1,14 @@
+Revised the previous topics and attended a meeting with Aneesh Chettan, where the earlier topics were reviewed, and new topics were assigned.
+Today's Topics Covered:
+
+Databases
+
+    1.MongoDB
+        Operations: Insert, Delete, Update, Bulk Insert
+        GUI Tools: Compass
+        Understanding Object IDs and extracting timestamps from them
+        MongoDB Best Practices
+        Naming Conventions for Collections and Databases
+
+    2.MySQL
+        Operations: Insert, Delete, Update
