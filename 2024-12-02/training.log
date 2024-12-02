@@ -1,0 +1,16 @@
+Updated requests and Parsel code by optimizing the XPath.
+Today's Topics Covered:
+
+Databases
+
+    MongoDB
+        Operations: Exporting, importing, dumping, and restoring
+        Sharding, clustering, and nodes
+        Indexing
+        MongoDB guidelines:
+            Indexing with a unique key
+            Collection and database sharding
+            Naming standards for collections and databases
+            Data backup
+
+    PostgreSQL (Psql)
