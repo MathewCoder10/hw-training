@@ -96,7 +96,7 @@ def fetch_properties(start_url):
 
 if __name__ == "__main__":
     start_url = 'https://www.bayut.com/to-rent/property/dubai/'
-    output_file = "proper.json"
+    output_file = "properties.json"
 
     logger.info(f"Starting property scraping from {start_url}")
 
