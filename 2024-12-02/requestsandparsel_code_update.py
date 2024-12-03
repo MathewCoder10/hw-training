@@ -24,7 +24,7 @@ def fetch_property_details(url):
         breadcrumbs = " > ".join(selector.xpath('//div[@aria-label="Breadcrumb"]//span[@aria-label="Link name"]/text()').getall()[:-1]) or None
         amenities = [
             re.sub(r'[^A-Za-z]+', '', amenity).strip() 
-            for amenity in selector.xpath("//div[@class='_91c991df']//span[@class='_7181e5ac']/text()").getall()
+            for amenity in selector.xpath("//span[@class='_7181e5ac']/text()").getall()
         ]
         amenities = list(filter(None, amenities)) or None
 
@@ -96,7 +96,7 @@ def fetch_properties(start_url):
 
 if __name__ == "__main__":
     start_url = 'https://www.bayut.com/to-rent/property/dubai/'
-    output_file = "properties.json"
+    output_file = "proper.json"
 
     logger.info(f"Starting property scraping from {start_url}")
 
