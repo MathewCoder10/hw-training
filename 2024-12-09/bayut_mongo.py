@@ -7,13 +7,11 @@ import pymongo
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-MAX_PROPERTIES = 100
+MAX_PROPERTIES = 1000
 BASE_URL = 'https://www.bayut.com'
-
-
 client = pymongo.MongoClient("mongodb://localhost:27017/") 
-db = client["bayut_scrap_optimized"] 
-collection = db["properties"]  
+db = client["bayut_mongo"] 
+collection = db["properties_mongo"]
 
 def extract_digits(text):
     if text:
