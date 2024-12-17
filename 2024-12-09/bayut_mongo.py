@@ -31,9 +31,9 @@ def fetch_property_details(url):
 
     try:
 
-        bedrooms = extract_digits(selector.xpath('//span[@aria-label="Beds"]//span[contains(@class, "_140e6903")]/text()').get())
-        bathrooms = extract_digits(selector.xpath('//span[@aria-label="Baths"]//span[contains(@class, "_140e6903")]/text()').get())
-        size = selector.xpath('//span[@aria-label="Area"]//span[contains(@class, "_140e6903")]//span/text()').get()
+        bedrooms = extract_digits(selector.xpath('//span[@aria-label="Beds"]//span/text()').get())
+        bathrooms = extract_digits(selector.xpath('//span[@aria-label="Baths"]//span/text()').get())
+        size = selector.xpath('//span[@aria-label="Area"]//span//span/text()').get()
 
         breadcrumbs = " > ".join(selector.xpath('//div[@aria-label="Breadcrumb"]//span[@aria-label="Link name"]/text()').getall()[:-1]) or None
         
