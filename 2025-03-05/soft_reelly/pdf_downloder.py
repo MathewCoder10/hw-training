@@ -33,7 +33,8 @@ class Pdf_Downloader:
     def indirect_pdf(self, url, file_path):
         """
         Downloads a PDF indirectly using a Google Drive URL.
-        Extracts the file ID from the URL, builds the download URL, and saves the file.
+        If it does, extracts the file ID and downloads the PDF.
+        Otherwise, the URL is skipped.
         """
         match = re.search(r"/d/([^/]+)/", url)
         if not match:
@@ -57,7 +58,7 @@ class Pdf_Downloader:
         """
         Iterates over all documents in the MongoDB collection, processes URLs 
         for floor plans and marketing brochures, and downloads the PDFs using 
-        the appropriate method (direct or indirect).
+        the appropriate method based on URL content.
         """
         for doc in self.collection.find():
             doc_id = doc.get("id") or str(doc.get("_id"))
@@ -68,15 +69,17 @@ class Pdf_Downloader:
                 if isinstance(floor_urls, str):
                     floor_urls = [floor_urls]
                 for idx, url in enumerate(floor_urls):
-                    if len(floor_urls) == 1:
-                        filename = f"{doc_id}_floorplan.pdf"
-                    else:
-                        filename = f"{doc_id}_floorplan_{idx+1}.pdf"
+                    filename = (f"{doc_id}_floorplan.pdf" 
+                                if len(floor_urls) == 1 
+                                else f"{doc_id}_floorplan_{idx+1}.pdf")
                     file_path = os.path.join("soft_reelly_pdf", filename)
+                    
                     if ".pdf" in url.lower():
                         self.direct_pdf(url, file_path)
-                    else:
+                    elif "https://drive.google.com" in url:
                         self.indirect_pdf(url, file_path)
+                    else:
+                        print(f"Skipping URL: {url}")
             
             # Process marketing brochure URLs
             brochure_urls = doc.get("marketing_brochure")
@@ -84,15 +87,17 @@ class Pdf_Downloader:
                 if isinstance(brochure_urls, str):
                     brochure_urls = [brochure_urls]
                 for idx, url in enumerate(brochure_urls):
-                    if len(brochure_urls) == 1:
-                        filename = f"{doc_id}_brochure.pdf"
-                    else:
-                        filename = f"{doc_id}_brochure_{idx+1}.pdf"
+                    filename = (f"{doc_id}_brochure.pdf" 
+                                if len(brochure_urls) == 1 
+                                else f"{doc_id}_brochure_{idx+1}.pdf")
                     file_path = os.path.join("soft_reelly_pdf", filename)
+                    
                     if ".pdf" in url.lower():
                         self.direct_pdf(url, file_path)
-                    else:
+                    elif "https://drive.google.com" in url:
                         self.indirect_pdf(url, file_path)
+                    else:
+                        print(f"Skipping URL: {url}")
 
     def close(self):
         """
@@ -103,7 +108,7 @@ class Pdf_Downloader:
             print("Closed MongoDB connection.")
 
 if __name__ == "__main__":
-    downloader_obj = Pdf_Downloader()
-    downloader_obj.init()
-    downloader_obj.start()
-    downloader_obj.close()
+    downloader = Pdf_Downloader()
+    downloader.init()
+    downloader.start()
+    downloader.close()
