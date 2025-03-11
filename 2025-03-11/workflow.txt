@@ -1,0 +1,351 @@
+test> mongosh
+test> use myNewDB
+switched to db myNewDB
+myNewDB> show collections
+
+myNewDB> db.users.insertOne({ user_id: 1, first_name: "abin", last_name: "joseph" })
+{
+  acknowledged: true,
+  insertedId: ObjectId('67cffaf30395025727c1c18c')
+}
+myNewDB> db.users.insertMany([
+...   { user_id: 2, first_name: "gibin", last_name: "geo" },
+...   { user_id: 3, first_name: "arjun", last_name: "suresh" },
+...   { user_id: 4, first_name: "manu", last_name: "s" }
+... ])
+{
+  acknowledged: true,
+  insertedIds: {
+    '0': ObjectId('67cffb040395025727c1c18d'),
+    '1': ObjectId('67cffb040395025727c1c18e'),
+    '2': ObjectId('67cffb040395025727c1c18f')
+  }
+}
+myNewDB> db
+myNewDB
+myNewDB> db.users.createIndex({ user_id: 1 }, { unique: true })
+user_id_1
+myNewDB> db.users.createIndex({ first_name: 1 })
+first_name_1
+myNewDB> db.users.createIndex({ first_name: 1, last_name: 1 })
+first_name_1_last_name_1
+myNewDB> db.users.find({ user_id: 2 })
+[
+  {
+    _id: ObjectId('67cffb040395025727c1c18d'),
+    user_id: 2,
+    first_name: 'gibin',
+    last_name: 'geo'
+  }
+]
+myNewDB> db.users.find({ first_name: "abin" })
+[
+  {
+    _id: ObjectId('67cffaf30395025727c1c18c'),
+    user_id: 1,
+    first_name: 'abin',
+    last_name: 'joseph'
+  }
+]
+myNewDB> db.users.find({ first_name: "abin", last_name: "joseph" })
+[
+  {
+    _id: ObjectId('67cffaf30395025727c1c18c'),
+    user_id: 1,
+    first_name: 'abin',
+    last_name: 'joseph'
+  }
+]
+myNewDB> db.users.find({ user_id: { $gt: 2 } })
+[
+  {
+    _id: ObjectId('67cffb040395025727c1c18e'),
+    user_id: 3,
+    first_name: 'arjun',
+    last_name: 'suresh'
+  },
+  {
+    _id: ObjectId('67cffb040395025727c1c18f'),
+    user_id: 4,
+    first_name: 'manu',
+    last_name: 's'
+  }
+]
+myNewDB> db.users.find().sort({ first_name: 1 })
+[
+  {
+    _id: ObjectId('67cffaf30395025727c1c18c'),
+    user_id: 1,
+    first_name: 'abin',
+    last_name: 'joseph'
+  },
+  {
+    _id: ObjectId('67cffb040395025727c1c18e'),
+    user_id: 3,
+    first_name: 'arjun',
+    last_name: 'suresh'
+  },
+  {
+    _id: ObjectId('67cffb040395025727c1c18d'),
+    user_id: 2,
+    first_name: 'gibin',
+    last_name: 'geo'
+  },
+  {
+    _id: ObjectId('67cffb040395025727c1c18f'),
+    user_id: 4,
+    first_name: 'manu',
+    last_name: 's'
+  }
+]
+myNewDB> db.users.updateOne({ user_id: 3 }, { $set: { last_name: "smith" } })
+{
+  acknowledged: true,
+  insertedId: null,
+  matchedCount: 1,
+  modifiedCount: 1,
+  upsertedCount: 0
+}
+myNewDB> show collections
+users
+myNewDB> db.users.find({ user_id: 2 })
+[
+  {
+    _id: ObjectId('67cffb040395025727c1c18d'),
+    user_id: 2,
+    first_name: 'gibin',
+    last_name: 'geo'
+  }
+]
+myNewDB> db.users.find({ user_id: 3 })
+[
+  {
+    _id: ObjectId('67cffb040395025727c1c18e'),
+    user_id: 3,
+    first_name: 'arjun',
+    last_name: 'smith'
+  }
+]
+myNewDB> db.users.updateOne(
+...   { first_name: "manu" },
+...   { $set: { first_name: "rinu" } }
+... )
+{
+  acknowledged: true,
+  insertedId: null,
+  matchedCount: 1,
+  modifiedCount: 1,
+  upsertedCount: 0
+}
+myNewDB> db.users.find({ first_name: "rinu"})
+[
+  {
+    _id: ObjectId('67cffb040395025727c1c18f'),
+    user_id: 4,
+    first_name: 'rinu',
+    last_name: 's'
+  }
+]
+myNewDB> db.users.find({ user_id: { $gt: 1, $lt: 4 } })
+[
+  {
+    _id: ObjectId('67cffb040395025727c1c18d'),
+    user_id: 2,
+    first_name: 'gibin',
+    last_name: 'geo'
+  },
+  {
+    _id: ObjectId('67cffb040395025727c1c18e'),
+    user_id: 3,
+    first_name: 'arjun',
+    last_name: 'smith'
+  }
+]
+myNewDB> db.users.find({ user_id: { $gte: 1, $lte: 4 } })
+[
+  {
+    _id: ObjectId('67cffaf30395025727c1c18c'),
+    user_id: 1,
+    first_name: 'abin',
+    last_name: 'joseph'
+  },
+  {
+    _id: ObjectId('67cffb040395025727c1c18d'),
+    user_id: 2,
+    first_name: 'gibin',
+    last_name: 'geo'
+  },
+  {
+    _id: ObjectId('67cffb040395025727c1c18e'),
+    user_id: 3,
+    first_name: 'arjun',
+    last_name: 'smith'
+  },
+  {
+    _id: ObjectId('67cffb040395025727c1c18f'),
+    user_id: 4,
+    first_name: 'rinu',
+    last_name: 's'
+  }
+]
+myNewDB> db.users.updateOne({ user_id: 1 }, { $set: { price: { amount: 10, currecurrency: "AED" } } })
+{
+  acknowledged: true,
+  insertedId: null,
+  matchedCount: 1,
+  modifiedCount: 1,
+  upsertedCount: 0
+}
+myNewDB> db.users.updateOne({ user_id: 2 }, { $set: { price: { amount: 20, currecurrency: "AED" } } })
+{
+  acknowledged: true,
+  insertedId: null,
+  matchedCount: 1,
+  modifiedCount: 1,
+  upsertedCount: 0
+}
+myNewDB> db.users.updateOne({ user_id: 3 }, { $set: { price: { amount: 25, currecurrency: "AED" } } })
+{
+  acknowledged: true,
+  insertedId: null,
+  matchedCount: 1,
+  modifiedCount: 1,
+  upsertedCount: 0
+}
+myNewDB> db.users.updateOne({ user_id: 4 }, { $set: { price: { amount: 30, currecurrency: "AED" } } })
+{
+  acknowledged: true,
+  insertedId: null,
+  matchedCount: 1,
+  modifiedCount: 1,
+  upsertedCount: 0
+}
+myNewDB> db.users.find()
+[
+  {
+    _id: ObjectId('67cffaf30395025727c1c18c'),
+    user_id: 1,
+    first_name: 'abin',
+    last_name: 'joseph',
+    price: { amount: 10, currency: 'AED' }
+  },
+  {
+    _id: ObjectId('67cffb040395025727c1c18d'),
+    user_id: 2,
+    first_name: 'gibin',
+    last_name: 'geo',
+    price: { amount: 20, currency: 'AED' }
+  },
+  {
+    _id: ObjectId('67cffb040395025727c1c18e'),
+    user_id: 3,
+    first_name: 'arjun',
+    last_name: 'smith',
+    price: { amount: 25, currency: 'AED' }
+  },
+  {
+    _id: ObjectId('67cffb040395025727c1c18f'),
+    user_id: 4,
+    first_name: 'rinu',
+    last_name: 's',
+    price: { amount: 30, currency: 'AED' }
+  }
+]
+myNewDB> db.users.updateMany(
+...   {},
+...   [
+...     {
+...       $set: {
+...         price_float: {
+...           $round: [{ $toDouble: "$price.amount" }, 2]
+...         }
+...       }
+...     }
+...   ]
+... )
+{
+  acknowledged: true,
+  insertedId: null,
+  matchedCount: 4,
+  modifiedCount: 4,
+  upsertedCount: 0
+}
+myNewDB> db.users.find()
+[
+  {
+    _id: ObjectId('67cffaf30395025727c1c18c'),
+    user_id: 1,
+    first_name: 'abin',
+    last_name: 'joseph',
+    price: { amount: 10, currency: 'AED' },
+    price_float: 10
+  },
+  {
+    _id: ObjectId('67cffb040395025727c1c18d'),
+    user_id: 2,
+    first_name: 'gibin',
+    last_name: 'geo',
+    price: { amount: 20, currency: 'AED' },
+    price_float: 20
+  },
+  {
+    _id: ObjectId('67cffb040395025727c1c18e'),
+    user_id: 3,
+    first_name: 'arjun',
+    last_name: 'smith',
+    price: { amount: 25, currency: 'AED' },
+    price_float: 25
+  },
+  {
+    _id: ObjectId('67cffb040395025727c1c18f'),
+    user_id: 4,
+    first_name: 'rinu',
+    last_name: 's',
+    price: { amount: 30, currency: 'AED' },
+    price_float: 30
+  }
+]
+myNewDB> exit
+
+#createing a new field price_float by converting the string formated amount to float.
+
+db.bayut_properties.updateMany(
+  {},
+  [
+    {
+      $set: {
+        price_float: {
+          $round: [
+            { $toDouble: { $replaceAll: { input: "$price.amount", find: ",", replacement: "" } } }, 
+            2
+          ]
+        }
+      }
+    }
+  ]
+)
+
+{
+  acknowledged: true,
+  insertedId: null,
+  matchedCount: 137,
+  modifiedCount: 137,
+  upsertedCount: 0
+}
+
+#Timestamp
+
+db.bayut_properties.find(
+  { property_id: "Bayut - JVC-MAD-MARIANWHARF2-3BR-S" }
+).forEach(doc => {
+  print("Creation Date:", doc._id.getTimestamp());
+});
+
+
+Creation Date:
+2024-12-24T08:58:54.000Z
+
+ObjectId("676a77ce1e5d19c1c5515523").getTimestamp()
+2024-12-24T08:58:54.000Z
+
+
