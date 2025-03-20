@@ -1,7 +1,15 @@
 import requests
+import logging
 from parsel import Selector
 from urllib.parse import urljoin
 from pymongo import MongoClient
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
 class Crawler:
     def __init__(self):
@@ -40,8 +48,11 @@ class Crawler:
         
         # MongoDB connection and collection
         self.client = MongoClient('mongodb://localhost:27017/')
-        self.db = self.client['sothebysrealty']
-        self.collection = self.db['crawler_newly']
+        self.db = self.client['sothebysrealty_db']
+        self.collection = self.db['crawler']
+        
+        # Create a unique index on the "url" field
+        self.collection.create_index("url", unique=True)
         
         # Base URL and starting URL
         self.base_url = 'https://www.sothebysrealty.com'
@@ -52,16 +63,18 @@ class Crawler:
         # Get the final page number from the starting URL
         response = requests.get(self.start_url, cookies=self.cookies, headers=self.headers)
         sel = Selector(response.text)
-        final_page_text = sel.xpath(
-            '//div[contains(@class, "pagination-container")]//a[not(contains(@aria-label, "Prev")) and not(contains(@aria-label, "Next"))][last()]/@aria-label'
-        ).get()
+
+        # XPATH expression to extract final page number
+        FINAL_PAGE_TEXT_XPATH = '//div[contains(@class, "pagination-container")]//a[not(contains(@aria-label, "Prev")) and not(contains(@aria-label, "Next"))][last()]/@aria-label'
+        final_page_text = sel.xpath(FINAL_PAGE_TEXT_XPATH).extract_first()
+
         self.final_page_num = int(final_page_text.split()[-1]) if final_page_text else 1
-        print("Final page number found:", self.final_page_num)
+        logging.info("Final page number found: %s", self.final_page_num)
 
         # Loop through each page and process items
         for page in range(1, self.final_page_num + 1):
             url = self.start_url if page == 1 else f'{self.base_url}/eng/associates/int/{page}-pg'
-            print("Scraping page:", url)
+            logging.info("Scraping page: %s", url)
             
             response = requests.get(url, cookies=self.cookies, headers=self.headers)
             sel = Selector(response.text)
@@ -70,12 +83,17 @@ class Crawler:
             # Store each profile URL in MongoDB
             for agent_url in profile_urls:
                 full_url = urljoin(self.base_url, agent_url)
-                print("Storing URL:", full_url)
-                self.collection.update_one(
+                result = self.collection.update_one(
                     {'url': full_url},
                     {'$set': {'url': full_url}},
                     upsert=True
                 )
+                if result.matched_count > 0:
+                    logging.info("Duplicate URL found and updated: %s", full_url)
+                else:
+                    logging.info("Storing URL: %s", full_url)
+        
+        # Close MongoDB connection after scraping is done
         self.close()
 
     def parse_items(self, selector):
@@ -87,7 +105,7 @@ class Crawler:
     def close(self):
         # Close MongoDB connection
         self.client.close()
-        print("Scraping completed and MongoDB connection closed.")
+        logging.info("Scraping completed and MongoDB connection closed.")
 
 if __name__ == "__main__":
     crawler = Crawler()
