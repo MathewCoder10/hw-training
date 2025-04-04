@@ -4,7 +4,7 @@ from curl_cffi import requests
 from pymongo import MongoClient, errors
 
 class Crawler:
-    def __init__(self, mongo_url='mongodb://localhost:27017/', db_name='Albert_Heijn_db', collection_name='crawler'):
+    def __init__(self, mongo_url='mongodb://localhost:27017/', db_name='Albert_Heijn_db', collection_name='crawler_update'):
         # MongoDB setup: initialize connection and collection.
         self.client = MongoClient(mongo_url)
         self.db = self.client[db_name]
