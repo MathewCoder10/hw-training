@@ -9,9 +9,7 @@ class Crawler:
         self.db = self.client[db_name]
         self.category_collection = self.db.category
         self.crawler_collection = self.db.crawler_full_new
-        
-        # Ensure unique index on product_url if needed (uncomment if required)
-        # self.crawler_collection.create_index("product_url", unique=True)
+        self.crawler_collection.create_index("product_url", unique=True)
         
         # Cursor for category documents (with no_cursor_timeout)
         self.categories_cursor = self.category_collection.find(
