@@ -83,33 +83,8 @@ class Parser_1:
                     'viewName': 'MainFlow.ProductDetailsPage',
                     'screenData': {
                         'variables': {
-                            'SKU': unique_id,
-                            'ChannelId': '',
                             'Locale': 'nl-NL',
-                            'StoreId': '0',
-                            'StoreNumber': 0,
-                            'CheckoutId': '5c3e7322-2383-42d8-8794-33c8b85a5693',
-                            'OrderEditId': '',
-                            'IsOrderEditMode': False,
-                            'TotalLineItemQuantity': 0,
-                            'ShoppingListProducts': {
-                                'List': [],
-                                'EmptyListItem': {
-                                    'SKU': '',
-                                    'Quantity': '0',
-                                },
-                            },
-                            'HasDailyValueIntakePercent': False,
-                            'CartPromotionDeliveryDate': '2025-04-07',
-                            'LineItemQuantity': 0,
-                            'IsPhone': False,
-                            '_isPhoneInDataFetchStatus': 1,
-                            'OneWelcomeUserId': '',
-                            '_oneWelcomeUserIdInDataFetchStatus': 1,
-                            '_sKUInDataFetchStatus': 1,
-                            'TotalCartItems': 0,
-                            '_totalCartItemsInDataFetchStatus': 1,
-                            '_productNameInDataFetchStatus': 1,
+                            'SKU': unique_id,
                         },
                     },
                 }
@@ -241,7 +216,7 @@ if __name__ == "__main__":
     DB_URI = "mongodb://localhost:27017/"
     DB_NAME = "plus_nl"
     CRAWLER_COLLECTION = "crawler"
-    PARSER_COLLECTION = "parser"
+    PARSER_COLLECTION = "parser_mm"
 
     parser = Parser_1(DB_URI, DB_NAME, CRAWLER_COLLECTION, PARSER_COLLECTION)
     parser.start()

@@ -30,7 +30,7 @@ class Crawler:
         self.collection.create_index("unique_id", unique=True)
 
         self.categories = CATEGORY_SLUGS
-        self.headers = HEADERS.copy()
+        self.headers = HEADERS
         self.base_url = BASE_API_URL
 
         # Fetch dynamic module version
@@ -89,16 +89,41 @@ class Crawler:
             return False
 
         for product in products:
-            plp = product.get('PLP_Str', {})
+            plp_str = product.get('PLP_Str', {})
             item = {}
-            sku = plp.get('SKU')
-            slug = plp.get('Slug') or ''
+
+            sku = plp_str.get('SKU','')
+            slug = plp_str.get('Slug','')
+            try:
+                original_price = float(plp_str.get("OriginalPrice", "0"))
+            except (TypeError, ValueError):
+                original_price = 0.0
+            try:
+                new_price = float(plp_str.get("NewPrice", "0"))
+            except (TypeError, ValueError):
+                new_price = 0.0
+
+            if new_price != 0.0 and new_price != original_price:
+                regular_price = round(original_price, 2)
+                selling_price = round(new_price, 2)
+                promotion_price = round(new_price, 2)
+            else:
+                regular_price = round(original_price, 2)
+                selling_price = round(new_price, 2)
+                promotion_price = round(new_price, 2)
+
+            # Promotion details
+            promotion_valid_from = plp_str.get("PromotionStartDate",'')
+            promotion_valid_upto = plp_str.get("PromotionEndDate",'')
+            promotion_type = plp_str.get("PromotionLabel",'')
+
+            
             item['unique_id'] = sku
             item['competitor_name'] = PROJECT_NAME
-            item['product_name'] = plp.get('Name')
-            item['brand'] = plp.get('Brand')
+            item['product_name'] = plp_str.get('Name')
+            item['brand'] = plp_str.get('Brand')
             item['pdp_url'] = f"https://www.plus.nl/product/{slug}" if slug else ''
-            category_level = plp.get('Categories', {}).get('List', [])
+            category_level = plp_str.get('Categories', {}).get('List', [])
             item['producthierarchy_level1'] = 'Home'
             item['producthierarchy_level2'] = 'Producten'
             item['producthierarchy_level3'] = category_level[0]['Name'] if len(category_level) > 0 else ''
@@ -113,20 +138,13 @@ class Crawler:
                 if level:
                     breadcrumb += f" > {level}"
             item['breadcrumb'] = breadcrumb
-            # Price parsing
-            try:
-                original_price = float(plp.get('OriginalPrice', 0))
-            except (TypeError, ValueError):
-                original_price = 0.0
-            item['regular_price'] = round(original_price, 2)
-
-            try:
-                new_price = float(plp.get('NewPrice', 0))
-            except (TypeError, ValueError):
-                new_price = 0.0
-            item['selling_price'] = round(new_price, 2)
-
-            item['image_urls'] = plp.get('ImageURL')
+            item['regular_price'] = regular_price
+            item['selling_price'] = selling_price
+            item['promotion_price'] = promotion_price
+            item['promotion_valid_from'] = promotion_valid_from
+            item['promotion_valid_upto'] = promotion_valid_upto
+            item['promotion_type'] = promotion_type
+            item['image_urls'] = plp_str.get('ImageURL','')
             item['category'] = category
 
             logger.info(item)
@@ -141,10 +159,11 @@ class Crawler:
 
     def failed_url(self, category, page, status_code):
         """Insert failed URL request details into MongoDB"""
-        failed = {}
-        failed['category'] = category,
-        failed['page'] = page,
-        failed['status_code'] = status_code
+        failed = {
+            'category': category,
+            'page': page,
+            'status_code': status_code
+        }
 
         try:
             self.failed_collection.insert_one(failed)
@@ -154,7 +173,7 @@ class Crawler:
 
     def build_payload(self, category, page_number):
         """Create JSON payload for API request without copying JSON_TEMPLATE."""
-        payload = {
+        return {
             'versionInfo': {
                 'moduleVersion': self.module_version,
                 'apiVersion': JSON_TEMPLATE['versionInfo']['apiVersion'],
@@ -167,7 +186,6 @@ class Crawler:
                 }
             }
         }
-        return payload
 
     def close(self):
         """Close MongoDB connection"""
@@ -179,4 +197,3 @@ if __name__ == "__main__":
     crawler = Crawler()
     crawler.start()
     crawler.close()
-
