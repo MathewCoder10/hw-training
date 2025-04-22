@@ -59,17 +59,4 @@ CATEGORY_SLUGS = [
 ]
 
 
-# JSON payload template (moduleVersion will be set dynamically in crawler)
-JSON_TEMPLATE = {
-    'versionInfo': {
-        'moduleVersion': '', 
-        'apiVersion': 'bYh0SIb+kuEKWPesnQKP1A',
-    },
-    'viewName': 'MainFlow.ProductListPage',
-    'screenData': {
-        'variables': {
-            'PageNumber': '',
-            'CategorySlug': '',
-        }
-    }
 }
