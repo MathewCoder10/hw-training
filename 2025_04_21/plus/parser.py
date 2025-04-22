@@ -8,11 +8,8 @@ from settings import (
     MONGO_DB,
     MONGO_COLLECTION_CRAWLER,
     MONGO_COLLECTION_PARSER,
-    MONGO_COLLECTION_URL_FAILED,
+    MONGO_COLLECTION_PARSER_URL_FAILED,
     HEADERS,
-    DETAILS_API_URL,
-    PROMOTION_API_URL,
-    MODULE_VERSION_URL,
     BASE_URL,
 )
 
@@ -28,7 +25,7 @@ class Parser:
         self.database = self.mongo_client[MONGO_DB]
         self.crawler_collection = self.database[MONGO_COLLECTION_CRAWLER]
         self.parser_collection = self.database[MONGO_COLLECTION_PARSER]
-        self.failed_urls_collection = self.database[MONGO_COLLECTION_URL_FAILED]
+        self.failed_urls_collection = self.database[MONGO_COLLECTION_PARSER_URL_FAILED]
 
         # Ensure uniqueness on unique_id
         self.parser_collection.create_index("unique_id", unique=True)
@@ -38,9 +35,9 @@ class Parser:
         self.request_headers['referer'] = BASE_URL
 
         # API endpoints
-        self.detail_api_url = DETAILS_API_URL
-        self.module_version_url = MODULE_VERSION_URL
-        self.promotion_api_url = PROMOTION_API_URL
+        self.detail_api_url = 'https://www.plus.nl/screenservices/ECP_Product_CW/ProductDetails/PDPContent/DataActionGetProductDetailsAndAgeInfo'
+        self.module_version_url = 'https://www.plus.nl/moduleservices/moduleversioninfo?1745203216246'
+        self.promotion_api_url = 'https://www.plus.nl/screenservices/ECP_Product_CW/ProductDetails/PDPContent/DataActionGetPromotionOffer'
 
         # Fetch dynamic module version
         try:

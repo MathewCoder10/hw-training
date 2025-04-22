@@ -35,7 +35,8 @@ db = client[MONGO_DB]
 # Collections
 MONGO_COLLECTION_CRAWLER = f"{PROJECT_NAME}_crawler"
 MONGO_COLLECTION_PARSER = f"{PROJECT_NAME}_parser"
-MONGO_COLLECTION_URL_FAILED = f"{PROJECT_NAME}_url_failed"
+MONGO_COLLECTION_CRAWLER_URL_FAILED = f"{PROJECT_NAME}_crawler_url_failed"
+MONGO_COLLECTION_PARSER_URL_FAILED = f"{PROJECT_NAME}_parser_url_failed"
 
 # Headers for API requests
 HEADERS = {
@@ -57,25 +58,6 @@ CATEGORY_SLUGS = [
     'kaas-om-mee-te-koken', 'plantaardige-kaas', 'kinderkazen'
 ]
 
-# Base API endpoint for product lists
-BASE_API_URL = (
-    'https://www.plus.nl/screenservices/ECP_Composition_CW/'
-    'ProductLists/PLP_Content/DataActionGetProductListAndCategoryInfo'
-)
-
-DETAILS_API_URL = (
-    'https://www.plus.nl/screenservices/ECP_Product_CW/'
-    'ProductDetails/PDPContent/DataActionGetProductDetailsAndAgeInfo'
-)
-PROMOTION_API_URL = (
-    'https://www.plus.nl/screenservices/ECP_Product_CW/'
-    'ProductDetails/PDPContent/DataActionGetPromotionOffer'
-)
-
-# URL to fetch dynamic module version
-MODULE_VERSION_URL = (
-    'https://www.plus.nl/moduleservices/moduleversioninfo?1745203216246'
-)
 
 # JSON payload template (moduleVersion will be set dynamically in crawler)
 JSON_TEMPLATE = {
