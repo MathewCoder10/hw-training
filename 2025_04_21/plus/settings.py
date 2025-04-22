@@ -59,4 +59,3 @@ CATEGORY_SLUGS = [
 ]
 
 
-}
