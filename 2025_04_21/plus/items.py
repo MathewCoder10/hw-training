@@ -26,6 +26,13 @@ class ProductCrawlerItem(DynamicDocument):
     unique_id = StringField(required=True)
     product_name = StringField()
     
+class ProductParserFailedItem(DynamicDocument):
+    """Initializing URL fields and their Data Types."""
+
+    meta = {"db_alias": "default", "collection": MONGO_COLLECTION_PARSER_URL_FAILED}
+    unique_id                 = StringField(required=True)
+    pdp_url                   = StringField()
+    
 class ProductParserItem(DynamicDocument):
     """Initializing URL fields and their Data Types."""
 
@@ -62,12 +69,7 @@ class ProductParserItem(DynamicDocument):
     fat_percentage            = StringField()
 
 
-class ProductParserFailedItem(DynamicDocument):
-    """Initializing URL fields and their Data Types."""
 
-    meta = {"db_alias": "default", "collection": MONGO_COLLECTION_PARSER_URL_FAILED}
-    unique_id                 = StringField(required=True)
-    pdp_url                   = StringField()
 
 
 
