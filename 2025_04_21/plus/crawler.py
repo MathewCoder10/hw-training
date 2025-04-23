@@ -24,8 +24,6 @@ class Crawler:
         self.database = get_db()
         self.crawler_collection = self.database[MONGO_COLLECTION_CRAWLER]
         self.failed_urls_collection = self.database[MONGO_COLLECTION_CRAWLER_URL_FAILED]
-        self.base_url = 'https://www.plus.nl/screenservices/ECP_Composition_CW/ProductLists/PLP_Content/DataActionGetProductListAndCategoryInfo'
-        self.module_version_url = 'https://www.plus.nl/moduleservices/moduleversioninfo?1745203216246'
 
         # Fetch dynamic module version
         try:
@@ -36,7 +34,8 @@ class Crawler:
 
     def fetch_module_version(self):
         """Fetch module version token for detail API."""
-        response = requests.get(self.module_version_url, headers=HEADERS)
+        module_version_url = 'https://www.plus.nl/moduleservices/moduleversioninfo?1745203216246'
+        response = requests.get(module_version_url, headers=HEADERS)
         data = response.json()
         token = data.get('versionToken')
         if not token:
@@ -64,7 +63,8 @@ class Crawler:
                                 }
                             }
                         }
-                response = requests.post(self.base_url, headers=HEADERS, json=payload)
+                base_url = 'https://www.plus.nl/screenservices/ECP_Composition_CW/ProductLists/PLP_Content/DataActionGetProductListAndCategoryInfo'
+                response = requests.post(base_url, headers=HEADERS, json=payload)
                 if response.status_code == 200:
 
                     products = self.parse_items(response, category, page)

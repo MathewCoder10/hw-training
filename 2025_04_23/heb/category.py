@@ -1,36 +1,28 @@
+import logging
 import requests
-import json
-from pymongo import MongoClient
+from mongoengine import connect,disconnect
+from mongoengine.connection import get_db
+from mongoengine.errors import NotUniqueError
+from items import ProductCrawlerFailedItem,ProductCrawlerItem
+from settings import (
+    MONGO_URI,
+    MONGO_DB,
+    MONGO_COLLECTION_CATEGORY,
+    HEADERS
+)
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class Category:
-    def __init__(self, mongo_uri="mongodb://localhost:27017/", db_name="heb_db", collection_name="category_23"):
-        # Initialize MongoDB client, database, and collection
-        self.client = MongoClient(mongo_uri)
-        self.db = self.client[db_name]
-        self.category_collection = self.db[collection_name]
-        
+    def __init__(self):
+        # Connect to MongoDB
+        connect(db=MONGO_DB, host=MONGO_URI)
+        self.database = get_db()
+        self.crawler_collection = self.database[MONGO_COLLECTION_CATEGORY]
+        self.base_url = 'https://www.plus.nl/screenservices/ECP_Composition_CW/ProductLists/PLP_Content/DataActionGetProductListAndCategoryInfo'
+        self.module_version_url = 'https://www.plus.nl/moduleservices/moduleversioninfo?1745203216246'
         # Base URL and request details
         self.base_url = "https://www.heb.com"
-        self.headers = {
-            'accept': '*/*',
-            'accept-language': 'en-US,en;q=0.9',
-            'amplitude-device-id': 'h-b34c7492-a703-45e9-81b8-05da7ff65eb4',
-            'apollographql-client-name': 'WebPlatform-Solar (Production)',
-            'apollographql-client-version': '22b50a38e0e0961393883f53de7dad4818a32bee',
-            'cache-control': 'no-cache',
-            'content-type': 'application/json',
-            'origin': self.base_url,
-            'pragma': 'no-cache',
-            'priority': 'u=1, i',
-            'referer': self.base_url + '/',
-            'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Linux"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-origin',
-            'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        }
         self.json_data = {
             'operationName': 'ShopNavigation',
             'variables': {},

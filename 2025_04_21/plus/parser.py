@@ -14,9 +14,7 @@ from settings import (
     MONGO_COLLECTION_PARSER_URL_FAILED,
     HEADERS,
 )
-
-# Configure logger
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class Parser:
     def __init__(self):
@@ -26,32 +24,29 @@ class Parser:
         self.crawler_collection = self.database[MONGO_COLLECTION_CRAWLER]
         self.parser_collection = self.database[MONGO_COLLECTION_PARSER]
         self.failed_urls_collection = self.database[MONGO_COLLECTION_PARSER_URL_FAILED]
-        # API endpoints
-        self.detail_api_url = ('https://www.plus.nl/screenservices/ECP_Product_CW/ProductDetails/PDPContent/DataActionGetProductDetailsAndAgeInfo')
-        self.module_version_url = ('https://www.plus.nl/moduleservices/moduleversioninfo?1745203216246')
-        self.promotion_api_url = ('https://www.plus.nl/screenservices/ECP_Product_CW/ProductDetails/PDPContent/DataActionGetPromotionOffer')
 
         # Fetch dynamic module version
         try:
             self.module_version = self.fetch_module_version()
         except Exception:
-            logger.error(
+            logging.error(
                 "Could not initialize parser due to module version fetch failure."
             )
             raise
 
     def fetch_module_version(self):
         """Fetch module version token for detail API."""
-        response = requests.get(self.module_version_url, headers=HEADERS)
+        module_version_url = 'https://www.plus.nl/moduleservices/moduleversioninfo?1745203216246'
+        response = requests.get(module_version_url, headers=HEADERS)
         data = response.json()
         token = data.get('versionToken')
         if not token:
             raise ValueError("versionToken missing in module version response")
-        logger.info(f"Fetched module version for parser: {token}")
+        logging.info(f"Fetched module version for parser: {token}")
         return token
 
     def start(self):
-        logger.info("Parser started.")
+        logging.info("Parser started.")
         for crawler_doc in self.crawler_collection.find({}):
             sku = crawler_doc.get('unique_id')
             product_name = crawler_doc.get('product_name')
@@ -71,8 +66,8 @@ class Parser:
                     }
                 }
             }
-
-            detail_response = requests.post(self.detail_api_url, headers=HEADERS, json=payload)
+            detail_api_url = 'https://www.plus.nl/screenservices/ECP_Product_CW/ProductDetails/PDPContent/DataActionGetProductDetailsAndAgeInfo'
+            detail_response = requests.post(detail_api_url, headers=HEADERS, json=payload)
             if detail_response.status_code == 200:
                 self.parse_items(detail_response, sku, product_name)
             else:
@@ -82,9 +77,9 @@ class Parser:
                 failed_item ['issue'] = detail_response.status_code
                 try:
                     ProductParserFailedItem(**failed_item).save()
-                    logger.info(f"Logged failed URL for SKU {sku}")
+                    logging.info(f"Logged failed URL for SKU {sku}")
                 except Exception:
-                    logger.exception("Failed to log URL failure")
+                    logging.exception("Failed to log URL failure")
 
     def promotion(self, sku, product_name, regular_price):
         """Fetch promotion info"""
@@ -103,61 +98,56 @@ class Parser:
             }
         }
 
-        promotion_response = requests.post(self.promotion_api_url, headers=HEADERS, json=payload)
-        if promotion_response.status_code != 200:
-            failed_item = {}
-            failed_item ['unique_id'] = sku
-            failed_item ['product_name'] = product_name
-            failed_item ['issue'] = promotion_response.status_code
-            try:
-                ProductParserFailedItem(**failed_item).save()
-                logger.info(f"Logged promotion failure for SKU {sku}")
-            except Exception:
-                logger.exception("Failed to log promotion failure")
-            # Return defaults
-            return {
-                'selling_price': regular_price,
-                'promotion_price': '',
-                'promotion_valid_from': '',
-                'promotion_valid_upto': '',
-                'promotion_type': '',
-                'promotion_description': ''
-            }
+        promotion_api_url = ('https://www.plus.nl/screenservices/ECP_Product_CW/ProductDetails/PDPContent/DataActionGetPromotionOffer')
+        promotion_response = requests.post(promotion_api_url,headers=HEADERS,json=payload)
 
-        offer = promotion_response.json().get('data', {}).get('Offer', {})
-        promotion_type = offer.get('DisplayInfo_Label', '')
-        if promotion_type:
-            start_date = offer.get('StartDate', '')
-            end_date = offer.get('EndDate', '')
-            newprice = float(offer.get('NewPrice', 0))
+        # Positive check for HTTP 200
+        if promotion_response.status_code == 200:
+            data = promotion_response.json().get('data', {})
+            offer = data.get('Offer', {})
+            promotion_type = offer.get('DisplayInfo_Label', '')
 
-            if newprice == 0:
-                selling_price = float(offer.get('PriceOriginal_Product', 0))
-                promotion_price = 0
-                promotion_description = ''
-            else:
-                selling_price = newprice
-                promotion_price = newprice
+            if promotion_type:
+                start_date = offer.get('StartDate', '')
+                end_date = offer.get('EndDate', '')
+                new_price = float(offer.get('NewPrice', 0))
+
+                if new_price > 0:
+                    selling_price = new_price
+                    promotion_price = new_price
+                else:
+                    selling_price = float(offer.get('PriceOriginal_Product', 0))
+                    promotion_price = 0
+
                 promotion_description = self.build_description(offer)
 
-            return {
-                'selling_price': selling_price,
-                'promotion_price': promotion_price,
-                'promotion_valid_from': start_date,
-                'promotion_valid_upto': end_date,
-                'promotion_type': promotion_type,
-                'promotion_description': promotion_description
-            }
-        else:
-            return {
-                'selling_price': regular_price,
-                'promotion_price': 0,
-                'promotion_valid_from': '',
-                'promotion_valid_upto': '',
-                'promotion_type': '',
-                'promotion_description': ''
-            }
+                return {
+                    'selling_price': selling_price,
+                    'promotion_price': promotion_price,
+                    'promotion_valid_from': start_date,
+                    'promotion_valid_upto': end_date,
+                    'promotion_type': promotion_type,
+                    'promotion_description': promotion_description
+                }
 
+        # On failure (non-200) or no promotion available, log and return defaults
+        failed_item = {}
+        failed_item ['unique_id'] = sku
+        failed_item ['product_name'] = product_name
+        failed_item ['issue'] = promotion_response.status_code
+        try:
+            ProductParserFailedItem(**failed_item).save()
+            logging.info(f"Logged promotion failure for SKU {sku}")
+        except Exception:
+            logging.exception("Failed to log promotion failure")
+        return {
+            'selling_price': regular_price,
+            'promotion_price': 0,
+            'promotion_valid_from': '',
+            'promotion_valid_upto': '',
+            'promotion_type': '',
+            'promotion_description': ''
+        }
 
 
     def parse_items(self, response, sku , product_name):
@@ -278,7 +268,7 @@ class Parser:
 
     def close(self):
         disconnect()
-        logger.info("MongoDB connection closed.")
+        logging.info("MongoDB connection closed.")
 
 if __name__ == '__main__':
     parser = Parser()
