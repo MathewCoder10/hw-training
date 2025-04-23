@@ -19,8 +19,6 @@ from settings import (
 logger = logging.getLogger(__name__)
 
 class Parser:
-    """Parser for product details, mirroring the structure of the Crawler."""
-
     def __init__(self):
         # MongoDB setup
         connect(db=MONGO_DB, host=MONGO_URI)
@@ -53,7 +51,6 @@ class Parser:
         return token
 
     def start(self):
-        """Start parsing process: fetch details, promotions, and store results."""
         logger.info("Parser started.")
         for crawler_doc in self.crawler_collection.find({}):
             sku = crawler_doc.get('unique_id')
@@ -90,7 +87,7 @@ class Parser:
                     logger.exception("Failed to log URL failure")
 
     def promotion(self, sku, product_name, regular_price):
-        """Fetch promotion info and return all relevant prices and metadata."""
+        """Fetch promotion info"""
         payload = {
             'versionInfo': {
                 'moduleVersion': self.module_version,
@@ -164,7 +161,7 @@ class Parser:
 
 
     def parse_items(self, response, sku , product_name):
-        """Parse fields from product details, merge with crawler doc, include promotions."""
+
         data = response.json().get('data', {})
         product = data.get('ProductOut', {})
         overview = response.json().get('data', {}).get('ProductOut', {}).get('Overview', {})
@@ -207,8 +204,6 @@ class Parser:
             if 'Biologisch' in long_description:
                 organic_type = 'Organic'
                 break
-
-        # Fat percentage from nutrients
         nutrients = product.get('Nutrient', {}).get('Nutrients', {}).get('List', [])
         fat_percentage = ''
         for n in nutrients:
