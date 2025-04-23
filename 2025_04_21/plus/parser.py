@@ -1,8 +1,11 @@
 import logging
 import re
 import requests
+from items import ProductParserFailedItem, ProductParserItem
 from datetime import datetime
-from pymongo import MongoClient, errors
+from mongoengine import connect, disconnect
+from mongoengine.connection import get_db
+from mongoengine.errors import NotUniqueError
 from settings import (
     MONGO_URI,
     MONGO_DB,
@@ -10,7 +13,6 @@ from settings import (
     MONGO_COLLECTION_PARSER,
     MONGO_COLLECTION_PARSER_URL_FAILED,
     HEADERS,
-    BASE_URL,
 )
 
 # Configure logger
@@ -21,35 +23,28 @@ class Parser:
 
     def __init__(self):
         # MongoDB setup
-        self.mongo_client = MongoClient(MONGO_URI)
-        self.database = self.mongo_client[MONGO_DB]
+        connect(db=MONGO_DB, host=MONGO_URI)
+        self.database = get_db()
         self.crawler_collection = self.database[MONGO_COLLECTION_CRAWLER]
         self.parser_collection = self.database[MONGO_COLLECTION_PARSER]
         self.failed_urls_collection = self.database[MONGO_COLLECTION_PARSER_URL_FAILED]
-
-        # Ensure uniqueness on unique_id
-        self.parser_collection.create_index("unique_id", unique=True)
-
-        # Headers for HTTP requests
-        self.request_headers = HEADERS.copy()
-        self.request_headers['referer'] = BASE_URL
-
         # API endpoints
-        self.detail_api_url = 'https://www.plus.nl/screenservices/ECP_Product_CW/ProductDetails/PDPContent/DataActionGetProductDetailsAndAgeInfo'
-        self.module_version_url = 'https://www.plus.nl/moduleservices/moduleversioninfo?1745203216246'
-        self.promotion_api_url = 'https://www.plus.nl/screenservices/ECP_Product_CW/ProductDetails/PDPContent/DataActionGetPromotionOffer'
+        self.detail_api_url = ('https://www.plus.nl/screenservices/ECP_Product_CW/ProductDetails/PDPContent/DataActionGetProductDetailsAndAgeInfo')
+        self.module_version_url = ('https://www.plus.nl/moduleservices/moduleversioninfo?1745203216246')
+        self.promotion_api_url = ('https://www.plus.nl/screenservices/ECP_Product_CW/ProductDetails/PDPContent/DataActionGetPromotionOffer')
 
         # Fetch dynamic module version
         try:
             self.module_version = self.fetch_module_version()
         except Exception:
-            logger.error("Could not initialize parser due to module version fetch failure.")
+            logger.error(
+                "Could not initialize parser due to module version fetch failure."
+            )
             raise
 
     def fetch_module_version(self):
         """Fetch module version token for detail API."""
-        response = requests.get(self.module_version_url, headers=self.request_headers)
-        response.raise_for_status()
+        response = requests.get(self.module_version_url, headers=HEADERS)
         data = response.json()
         token = data.get('versionToken')
         if not token:
@@ -57,9 +52,46 @@ class Parser:
         logger.info(f"Fetched module version for parser: {token}")
         return token
 
-    def build_payload(self, sku):
-        """Construct JSON payload for detail API request."""
-        return {
+    def start(self):
+        """Start parsing process: fetch details, promotions, and store results."""
+        logger.info("Parser started.")
+        for crawler_doc in self.crawler_collection.find({}):
+            sku = crawler_doc.get('unique_id')
+            product_name = crawler_doc.get('product_name')
+
+            # Build detail payload
+            payload = {
+                'versionInfo': {
+                    'moduleVersion': self.module_version,
+                    'apiVersion': 'j2jjJJxS4heD58kEZAYPUQ',
+                },
+                'viewName': 'MainFlow.ProductDetailsPage',
+                'screenData': {
+                    'variables': {
+                        'Product': {},
+                        'SKU': sku,
+                        'ProductName': product_name
+                    }
+                }
+            }
+
+            detail_response = requests.post(self.detail_api_url, headers=HEADERS, json=payload)
+            if detail_response.status_code == 200:
+                self.parse_items(detail_response, sku, product_name)
+            else:
+                failed_item = {}
+                failed_item ['unique_id'] = sku
+                failed_item ['product_name'] = product_name
+                failed_item ['issue'] = detail_response.status_code
+                try:
+                    ProductParserFailedItem(**failed_item).save()
+                    logger.info(f"Logged failed URL for SKU {sku}")
+                except Exception:
+                    logger.exception("Failed to log URL failure")
+
+    def promotion(self, sku, product_name, regular_price):
+        """Fetch promotion info and return all relevant prices and metadata."""
+        payload = {
             'versionInfo': {
                 'moduleVersion': self.module_version,
                 'apiVersion': 'j2jjJJxS4heD58kEZAYPUQ',
@@ -67,159 +99,164 @@ class Parser:
             'viewName': 'MainFlow.ProductDetailsPage',
             'screenData': {
                 'variables': {
-                    'Locale': 'nl-NL',
+                    'Product': {},
                     'SKU': sku,
+                    'ProductName': product_name
                 }
             }
         }
 
-    def start(self):
-        """Start parsing process: fetch details, promotions, and store results."""
-        logger.info("Parser started.")
-        for crawler_doc in self.crawler_collection.find({}):
-            sku = crawler_doc.get('unique_id')
-            pdp_url = crawler_doc.get('pdp_url')
-            payload = self.build_payload(sku)
-
-            # Detail API request
+        promotion_response = requests.post(self.promotion_api_url, headers=HEADERS, json=payload)
+        if promotion_response.status_code != 200:
+            failed_item = {}
+            failed_item ['unique_id'] = sku
+            failed_item ['product_name'] = product_name
+            failed_item ['issue'] = promotion_response.status_code
             try:
-                detail_response = requests.post(
-                    self.detail_api_url,
-                    headers=self.request_headers,
-                    json=payload
-                )
-                detail_response.raise_for_status()
-            except requests.RequestException as err:
-                logger.exception(f"Detail request failed for SKU {sku}: {err}")
-                self.record_failed_url(pdp_url, status_code=str(err))
-                continue
+                ProductParserFailedItem(**failed_item).save()
+                logger.info(f"Logged promotion failure for SKU {sku}")
+            except Exception:
+                logger.exception("Failed to log promotion failure")
+            # Return defaults
+            return {
+                'selling_price': regular_price,
+                'promotion_price': '',
+                'promotion_valid_from': '',
+                'promotion_valid_upto': '',
+                'promotion_type': '',
+                'promotion_description': ''
+            }
 
-            try:
-                detail_data = detail_response.json()
-            except ValueError:
-                logger.error(f"Invalid JSON for SKU {sku}")
-                continue
+        offer = promotion_response.json().get('data', {}).get('Offer', {})
+        promotion_type = offer.get('DisplayInfo_Label', '')
+        if promotion_type:
+            start_date = offer.get('StartDate', '')
+            end_date = offer.get('EndDate', '')
+            newprice = float(offer.get('NewPrice', 0))
 
-            product_section = self.extract_product(detail_data)
-            if not product_section:
-                logger.warning(f"No product details for SKU {sku}")
-                continue
+            if newprice == 0:
+                selling_price = float(offer.get('PriceOriginal_Product', 0))
+                promotion_price = 0
+                promotion_description = ''
+            else:
+                selling_price = newprice
+                promotion_price = newprice
+                promotion_description = self.build_description(offer)
 
-            # Promotion description
-            promotion_description = ''
-            if crawler_doc.get('promotion_type'):
-                try:
-                    promo_response = requests.post(
-                        self.promotion_api_url,
-                        headers=self.request_headers,
-                        json=payload
-                    )
-                    promo_response.raise_for_status()
-                    promo_data = promo_response.json().get('data', {}).get('Offer', {})
-                    promotion_description = self.build_description(promo_data)
-                except Exception as promo_error:
-                    logger.exception(f"Promotion request failed for SKU {sku}: {promo_error}")
+            return {
+                'selling_price': selling_price,
+                'promotion_price': promotion_price,
+                'promotion_valid_from': start_date,
+                'promotion_valid_upto': end_date,
+                'promotion_type': promotion_type,
+                'promotion_description': promotion_description
+            }
+        else:
+            return {
+                'selling_price': regular_price,
+                'promotion_price': 0,
+                'promotion_valid_from': '',
+                'promotion_valid_upto': '',
+                'promotion_type': '',
+                'promotion_description': ''
+            }
 
-            # Parse and store item including promotion_description
-            parsed_item = self.parse_items(product_section, crawler_doc, promotion_description)
 
-            try:
-                self.parser_collection.insert_one(parsed_item)
-                logger.info(f"Parsed and stored item for SKU {sku}")
-            except errors.DuplicateKeyError:
-                logger.warning(f"Duplicate SKU {sku}, skipping.")
 
-    def record_failed_url(self, url, status_code=''):
-        """Insert a failed URL record into the failed URLs collection."""
-        record = {'pdp_url': url}
-        if status_code != '':
-            record['status_code'] = status_code
-        try:
-            self.failed_urls_collection.insert_one(record)
-        except Exception:
-            logger.exception("Failed to record failed URL.")
-
-    def extract_product(self, response_json):
-        """Extract the ProductOut section from the API response."""
-        data_section = response_json.get('data')
-        return data_section.get('ProductOut') if data_section else None
-
-    def parse_items(self, product, crawler_doc, promotion_description=''):
-        """Parse fields from product details, merge with crawler doc, and include promotion_description."""
-
-        overview = product.get('Overview', {})
-        instructions = product.get('InstructionsAndSuggestions', {}).get('Instructions', {})
-        suggestions = product.get('InstructionsAndSuggestions', {}).get('Suggestions', {})
-        ingredients_text = product.get('Ingredients', '').strip()
-        logos = product.get('Logos', {}).get('PDPInProductInformation', {}).get('List', [])
-        nutrients = product.get('Nutrient', {}).get('Nutrients', {}).get('List', [])
-        allergens_text = product.get('Allergen', {}).get('Description', '').strip()
+    def parse_items(self, response, sku , product_name):
+        """Parse fields from product details, merge with crawler doc, include promotions."""
+        data = response.json().get('data', {})
+        product = data.get('ProductOut', {})
+        overview = response.json().get('data', {}).get('ProductOut', {}).get('Overview', {})
+        brand = overview.get('Brand', '')
+        slug = overview.get('Slug', '')
+        pdp_url = f"https://www.plus.nl/product/{slug}" if slug else ''
+        regular_price = float(overview.get('Price', 0))  
+        unique_id = sku
+        product_name = product_name
+        promotion = self.promotion(unique_id, product_name, regular_price) #doubt
+        category_level = overview.get('Categories', {}).get('List', [])
+        levels = ['Home', 'Producten'] + [lvl.get('Name', '') for lvl in category_level[:3]]
+        breadcrumb = ' > '.join([lvl for lvl in levels if lvl])
+        instructions = product.get('InstructionsAndSuggestions', {})
+        preparation_instructions = instructions.get('Instructions', {}).get('Preparation', '').strip()
+        usage_instructions = instructions.get('Instructions', {}).get('Usage', '').strip()
+        combined_instructions = f"{preparation_instructions} {usage_instructions}".strip()
+        storage_instructions = instructions.get('Instructions', {}).get('Storage', '').strip()
+        servings_per_pack = instructions.get('Suggestions', {}).get('Serving', '').strip()
+        ingredients = product.get('Ingredients', '').strip()
+        allergens = product.get('Allergen', {}).get('Description', '').strip()
         subtitle = overview.get('Subtitle', '')
         grammage_match = re.search(r"Per\s+\w+\s+(\d+)\s+(\w+)", subtitle)
         grammage_quantity = grammage_match.group(1) if grammage_match else ''
         grammage_unit = grammage_match.group(2) if grammage_match else ''
         price_match = re.search(r"\((.*?)\)", subtitle)
         price_per_unit = price_match.group(1) if price_match else ''
-        description_text = overview.get('Meta', {}).get('Description', '')
-        preparation_instructions = instructions.get('Preparation', '').strip()
-        usage_instructions = instructions.get('Usage', '').strip()
-        combined_instructions = f"{preparation_instructions} {usage_instructions}".strip()
-        storage_instructions = instructions.get('Storage', '').strip()
-        servings_per_pack = suggestions.get('Serving', '').strip()
+        product_description = overview.get('Meta', {}).get('Description', '')
+        logos = product.get('Logos', {}).get('PDPInProductInformation', {}).get('List', [])
         nutritional_score = ''
         organic_type = 'Non-Organic'
         for logo in logos:
-            logo_name = logo.get('Name', '')
-            if logo_name.startswith('Nutri-Score'):
-                score = logo_name.replace('Nutri-Score', '').strip().upper()
+            name = logo.get('Name', '')
+            long_description = logo.get('LongDescription', '')
+            if name.startswith('Nutri-Score'):
+                score = name.replace('Nutri-Score', '').strip().upper()
                 if score in list('ABCDE'):
                     nutritional_score = score
-                break
-            if 'Biologisch' in logo.get('LongDescription', ''):
+                    break
+            if 'Biologisch' in long_description:
                 organic_type = 'Organic'
                 break
+
+        # Fat percentage from nutrients
+        nutrients = product.get('Nutrient', {}).get('Nutrients', {}).get('List', [])
         fat_percentage = ''
-        for nutrient in nutrients:
-            if (
-                nutrient.get('ParentCode') == 'FAT'
-                and 'meervoudig onverzadigd' in nutrient.get('Description', '').lower()
-            ):
-                fat_percentage = nutrient.get('QuantityContained', {}).get('Value')
+        for n in nutrients:
+            if n.get('ParentCode') == 'FAT' and 'meervoudig onverzadigd' in n.get('Description', '').lower():
+                fat_percentage = n.get('QuantityContained', {}).get('Value', '')
                 break
 
+        # Assemble final item
         item = {}
-        item['unique_id']             = crawler_doc.get('unique_id')
-        item['competitor_name']       = crawler_doc.get('competitor_name')
-        item['product_name']          = crawler_doc.get('product_name')
-        item['brand']                 = crawler_doc.get('brand')
-        item['pdp_url']               = crawler_doc.get('pdp_url')
-        item['producthierarchy_level1']= crawler_doc.get('producthierarchy_level1')
-        item['producthierarchy_level2']= crawler_doc.get('producthierarchy_level2')
-        item['producthierarchy_level3']= crawler_doc.get('producthierarchy_level3')
-        item['producthierarchy_level4']= crawler_doc.get('producthierarchy_level4')
-        item['producthierarchy_level5']= crawler_doc.get('producthierarchy_level5')
-        item['breadcrumb']            = crawler_doc.get('breadcrumb')
-        item['regular_price']         = crawler_doc.get('regular_price')
-        item['selling_price']         = crawler_doc.get('selling_price')
-        item['promotion_price']       = crawler_doc.get('promotion_price')
-        item['promotion_valid_from']  = crawler_doc.get('promotion_valid_from')
-        item['promotion_valid_upto']  = crawler_doc.get('promotion_valid_upto')
-        item['promotion_type']        = crawler_doc.get('promotion_type')   
-        item['promotion_description'] = promotion_description
-        item['product_description']   = description_text
+        item['unique_id']             = unique_id
+        item['competitor_name']       = 'plus'
+        item['product_name']          = product_name
+        item['brand']                 = brand
+        item['pdp_url']               = pdp_url
+        item['producthierarchy_level1']= levels[0]
+        item['producthierarchy_level2']= levels[1]
+        item['producthierarchy_level3']= levels[2] if len(levels)>2 else ''
+        item['producthierarchy_level4']= levels[3] if len(levels)>3 else ''
+        item['producthierarchy_level5']= levels[4] if len(levels)>4 else ''
+        item['breadcrumb']            = breadcrumb
+        item['currency']              = '€'
+        item['regular_price']         = regular_price
+        item['selling_price']         = promotion['selling_price']
+        item['promotion_price']       = promotion['promotion_price']
+        item['promotion_valid_from']  = promotion['promotion_valid_from']
+        item['promotion_valid_upto']  = promotion['promotion_valid_upto']
+        item['promotion_type']        = promotion['promotion_type']
+        item['promotion_description'] = promotion['promotion_description']
+        item['product_description']   = product_description
         item['grammage_quantity']     = grammage_quantity
         item['grammage_unit']         = grammage_unit
         item['price_per_unit']        = price_per_unit
         item['instructions']          = combined_instructions
         item['storage_instructions']  = storage_instructions
         item['servings_per_pack']     = servings_per_pack
-        item['ingredients']           = ingredients_text
+        item['ingredients']           = ingredients
         item['nutritional_score']     = nutritional_score
         item['organictype']           = organic_type
-        item['allergens']             = allergens_text
+        item['allergens']             = allergens
         item['fat_percentage']        = fat_percentage
+        
+        logging.info(item)
+        try:
+            product_item = ProductParserItem(**item)
+            product_item.save()
+        except NotUniqueError:
+            logging.warning(f"Duplicate unique_id found")
 
-        return item
 
     def build_description(self, offer):
         """Construct a human-readable promotion description."""
@@ -245,7 +282,7 @@ class Parser:
         return f"{weekdays[dt.weekday()]} {dt.day} {months[dt.month-1]}"
 
     def close(self):
-        self.mongo_client.close()
+        disconnect()
         logger.info("MongoDB connection closed.")
 
 if __name__ == '__main__':

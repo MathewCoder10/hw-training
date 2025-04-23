@@ -23,21 +23,22 @@ class ProductCrawlerItem(DynamicDocument):
     """Initializing URL fields and their Data Types."""
 
     meta = {"db_alias": "default", "collection": MONGO_COLLECTION_CRAWLER}
-    unique_id = StringField(required=True)
+    unique_id = StringField(required=True, unique = True)
     product_name = StringField()
     
 class ProductParserFailedItem(DynamicDocument):
     """Initializing URL fields and their Data Types."""
 
     meta = {"db_alias": "default", "collection": MONGO_COLLECTION_PARSER_URL_FAILED}
-    unique_id                 = StringField(required=True)
-    pdp_url                   = StringField()
-    
+    unique_id = StringField(required=True)
+    product_name  = StringField()
+    issue = StringField()
+
 class ProductParserItem(DynamicDocument):
     """Initializing URL fields and their Data Types."""
 
     meta = {"db_alias": "default", "collection": MONGO_COLLECTION_PARSER}
-    unique_id                 = StringField(required=True)
+    unique_id                 = StringField(required=True, unique = True)
     competitor_name           = StringField()
     product_name              = StringField()
     brand                     = StringField()
@@ -48,6 +49,7 @@ class ProductParserItem(DynamicDocument):
     producthierarchy_level4   = StringField()
     producthierarchy_level5   = StringField()
     breadcrumb                = StringField()
+    currency                  = StringField()
     regular_price             = FloatField()
     selling_price             = FloatField()
     promotion_price           = FloatField()

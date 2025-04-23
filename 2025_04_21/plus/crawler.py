@@ -1,6 +1,8 @@
 import logging
 import requests
-from pymongo import MongoClient, errors
+from mongoengine import connect,disconnect
+from mongoengine.connection import get_db
+from mongoengine.errors import NotUniqueError
 from items import ProductCrawlerFailedItem,ProductCrawlerItem
 from settings import (
     MONGO_URI,
@@ -18,11 +20,10 @@ class Crawler:
 
     def __init__(self):
         # Connect to MongoDB
-        self.mongo = MongoClient(MONGO_URI)
-        self.db = self.mongo[MONGO_DB]
-        self.collection = self.db[MONGO_COLLECTION_CRAWLER]
-        self.failed_collection = self.db[MONGO_COLLECTION_CRAWLER_URL_FAILED]
-
+        connect(db=MONGO_DB, host=MONGO_URI)
+        self.database = get_db()
+        self.crawler_collection = self.database[MONGO_COLLECTION_CRAWLER]
+        self.failed_urls_collection = self.database[MONGO_COLLECTION_CRAWLER_URL_FAILED]
         self.base_url = 'https://www.plus.nl/screenservices/ECP_Composition_CW/ProductLists/PLP_Content/DataActionGetProductListAndCategoryInfo'
         self.module_version_url = 'https://www.plus.nl/moduleservices/moduleversioninfo?1745203216246'
 
@@ -78,11 +79,10 @@ class Crawler:
                     failed_item ['issue'] = response.status_code
 
                     try:
-                        product_item = ProductCrawlerFailedItem(**failed_item)
-                        product_item.save()
-                        logging.info(f"Logged failed URL")
+                        ProductCrawlerFailedItem(**failed_item).save()
+                        logging.info(f"Failed statuscode")
                     except Exception as e:
-                        logging.exception(f"Failed to log URL")
+                        logging.exception(f"Failed to insert")
 
 
     def parse_items(self, response, category, page):
@@ -97,9 +97,9 @@ class Crawler:
             try:
                 product_item = ProductCrawlerFailedItem(**failed_item)
                 product_item.save()
-                logging.info(f"Logged failed URL")
+                logging.info(f"No products found")
             except Exception as e:
-                logging.exception(f"Failed to log URL")
+                logging.exception(f"Failed to insert")
             return False
 
         # EXTRACT
@@ -119,15 +119,15 @@ class Crawler:
                 product_item = ProductCrawlerItem(**item)
                 product_item.save()
  
-            except errors.DuplicateKeyError:
-                logging.warning(f"Duplicate item {sku}, skipping")
+            except NotUniqueError:
+                logging.warning(f"Duplicate unique_id found")
 
         return True
 
 
     def close(self):
         """Close MongoDB connection"""
-        self.mongo.close()
+        disconnect()
         logging.info("MongoDB connection closed.")
 
 
