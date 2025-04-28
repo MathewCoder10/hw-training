@@ -1,7 +1,8 @@
 import logging
-import re
 import requests
+import re
 from parsel import Selector
+from urllib.parse import urljoin
 from mongoengine import connect, disconnect
 from mongoengine.connection import get_db
 from mongoengine.errors import NotUniqueError
@@ -40,95 +41,124 @@ class Crawler:
                 # Build URL with page parameter
                 paged_url = f"{base_url}?page={page}"
                 logging.info(f"Fetching page {page}: {paged_url}")
+                
+                response = requests.get(paged_url, headers=HEADERS, timeout=10)
+                if response.status_code == 200:
+                    has_items = self.parse_items(response, paged_url)
+                    if not has_items:
+                        logging.info(f"No more items found at {paged_url}. Stopping pagination.")
+                        break
+                    page += 1
 
-                try:
-                    response = requests.get(paged_url, headers=HEADERS, timeout=10)
-                except requests.RequestException as e:
-                    logging.error(f"Request failed for {paged_url}: {e}")
-                    self._log_failure(paged_url)
+                else:
+                    failed_item = {}
+                    failed_item ['category_url'] = paged_url
+
+                    try:
+                        product_item = ProductCrawlerFailedItem(**failed_item)
+                        product_item.save()
+                        logging.info(f"Failed statuscode")
+                    except Exception as e:
+                        logging.exception(f"Failed to insert")
                     break
 
-                if response.status_code != 200:
-                    logging.warning(f"Non-200 status code {response.status_code} for {paged_url}")
-                    self._log_failure(paged_url)
-                    break
-
-                has_items = self.parse_items(response, paged_url)
-                if not has_items:
-                    logging.info(f"No more items found at {paged_url}. Stopping pagination.")
-                    break
-
-                page += 1
+                
 
     def parse_items(self, response, page_url):
         """Parse HTML response, insert items or log failures."""
-        selector = Selector(response.text)
-        products_list = selector.xpath('//li[@data-clientside-hook="FilteredProductListItem"]')
 
-        if not products_list:
-            self._log_failure(page_url)
-            return False
-
-        for li in products_list:
-            # raw extraction
-            price_raw = li.xpath('.//p[@data-qa-id="entry-price"]//span/text()').get()
-            price_was_raw = li.xpath('.//span[contains(@class,"o-SearchProductListItem__prices__list-price")]/span/text()').get()
-
-            item_data = {
-                'pdp_url': li.xpath('.//a[@class="o-SearchProductListItem__image"]/@href').get(),
-                'image_url': li.xpath('.//img[contains(@class, "a-ResponsiveImage__img")]/@src').get(),
-                'product_name': li.xpath('.//img[contains(@class, "a-ResponsiveImage__img")]/@alt').get(),
-                'rating': li.xpath('.//span[@class="a-visuallyhidden" and contains(text(), "van")]/text()').get(),
-                'review': li.xpath('.//span[contains(@class,"m-StarRating__rating-count-text")]/text()').get(),
-                'quantity': li.xpath('.//span[contains(@class, "o-SearchProductListItem__info__items")]/text()').get(),
-                'product_code': li.xpath('.//li[span[contains(text(), "Productcode")]]/span/text()').get(),
-                'product_description': li.xpath('.//p[contains(@class, "o-SearchProductListItem__content__body__text")]/text()').get(),
-                'percentage_discount': li.xpath('.//span[@class="a-CircleBadge__inner"]/span/text()').get(),
-                'price': price_raw,
-                'per_unit_price': li.xpath('.//p[contains(@class,"unitPricing")]/text()').get(),
-                'price_was': price_was_raw,
-                'unique_id': li.xpath('.//form//input[@name="product"]/@value').get(),
-            }
-
-            # normalize and parse numeric prices
-            item_data['price'] = self._parse_price(item_data.get('price'))
-            item_data['price_was'] = self._parse_price(item_data.get('price_was'))
-
-            logging.info(f"Extracted item: {item_data.get('unique_id')} (price={item_data['price']}, was={item_data['price_was']})")
+        def clean_price(value):
+            if not value:
+                return 0.0
+            cleaned = re.sub(r'[^\d,\.]', '', value).replace(',', '.')
             try:
-                product_item = ProductCrawlerItem(**item_data)
-                product_item.save()
-            except NotUniqueError:
-                logging.warning(f"Duplicate unique_id skipped: {item_data.get('unique_id')}")
-            except Exception as e:
-                logging.exception(f"Failed to save item {item_data.get('unique_id')}: {e}")
+                return float(cleaned)
+            except ValueError:
+                logging.warning(f"Could not convert price: {value}")
+                return 0.0
+            
+        base = "https://www.farmaline.be"
+        
+        selector = Selector(response.text)
 
-        return True
+        # XPATH
+        PRODUCT_LIST_XPATH = '//li[@data-clientside-hook="FilteredProductListItem"]'
+        URL_XPATH = './/a[@class="o-SearchProductListItem__image"]/@href'
+        IMAGE_XPATH = './/img[@class="a-ResponsiveImage__img a-fullwidth-image"]/@src'
+        NAME_XPATH = './/img[@class="a-ResponsiveImage__img a-fullwidth-image"]/@alt'
+        RATING_XPATH = './/span[@class="a-visuallyhidden" and contains(., "van")]/text()'
+        REVIEW_XPATH = './/span[contains(@class,"m-StarRating__rating-count-text")]/text()'
+        QUANTITY_XPATH = './/span[@class="a-h4-tiny u-font-weight--bold o-SearchProductListItem__info__items"]/text()'
+        CODE_XPATH = './/li[span[contains(., "Productcode")]]/span/text()'
+        PRODUCT_DESCRIPTION_XPATH = './/p[@class="a-h4-tiny o-SearchProductListItem__content__body__text"]/text()'
+        PERCENTAGE_DISCOUNT_XPATH = './/span[@class="a-CircleBadge__inner"]/span/text()'
+        PRICE_XPATH = './/p[@data-qa-id="entry-price"]//span/text()'
+        PER_UNIT_PRICE_XPATH = './/p[contains(@class,"unitPricing")]/text()'
+        PRICE_WAS_XPATH = './/span[contains(@class,"o-SearchProductListItem__prices__list-price")]/span/text()'
+        UNIQUE_ID_XPATH = './/form//input[@name="product"]/@value'
 
-    def _parse_price(self, price_str):
-        """Convert a price string (e.g. '€9,99') to float."""
-        if not price_str:
-            return None
-        # Strip out any non-numeric characters except comma and dot
-        cleaned = re.sub(r"[^0-9,\.]", "", price_str)
-        # If European format ('9,99'), convert single comma to dot
-        if cleaned.count(',') == 1 and cleaned.count('.') == 0:
-            cleaned = cleaned.replace(',', '.')
+
+        products_list = selector.xpath(PRODUCT_LIST_XPATH)
+
+        if products_list:
+            for li in products_list:
+                pdp_url = li.xpath(URL_XPATH).get()
+                image_url = li.xpath(IMAGE_XPATH).get()
+                product_name = li.xpath(NAME_XPATH).get()
+                rating = li.xpath(RATING_XPATH).get()
+                review = li.xpath(REVIEW_XPATH).get()
+                quantity = li.xpath(QUANTITY_XPATH).get()
+                product_code = li.xpath(CODE_XPATH).get()
+                product_description= li.xpath(PRODUCT_DESCRIPTION_XPATH).get()
+                percentage_discount= li.xpath(PERCENTAGE_DISCOUNT_XPATH).get()
+                price= li.xpath(PRICE_XPATH).get()
+                per_unit_price= li.xpath(PER_UNIT_PRICE_XPATH).get()
+                price_was= li.xpath(PRICE_WAS_XPATH).get()
+                unique_id= li.xpath(UNIQUE_ID_XPATH).get()
+
+                # CLEAN
+                price = clean_price(price)
+                price_was = clean_price(price_was)
+                if pdp_url:
+                    pdp_url = urljoin(base, pdp_url)
+
+                # ITEM YEILD
+                item = {}
+                item['pdp_url'] = pdp_url
+                item['image_url'] = image_url
+                item['product_name'] = product_name
+                item['rating'] = rating
+                item['review'] = review
+                item['quantity'] = quantity
+                item['product_code'] = product_code
+                item['product_description'] = product_description
+                item['percentage_discount'] = percentage_discount
+                item['price'] = price
+                item['per_unit_price'] = per_unit_price
+                item['price_was'] = price_was
+                item['unique_id'] = unique_id
+
+                logging.info(item)
+                try:
+                    product_item = ProductCrawlerItem(**item)
+                    product_item.save()
+                except NotUniqueError:
+                    logging.warning(f"Duplicate unique_id found")
+
+            return True    
+
         else:
-            # Remove thousands separators
-            cleaned = cleaned.replace(',', '')
-        try:
-            return float(cleaned)
-        except ValueError:
-            return None
+            failed_item = {}
+            failed_item ['category_url'] = page_url
 
-    def _log_failure(self, url):
-        """Helper to log and record failed URLs"""
-        try:
-            ProductCrawlerFailedItem(category_url=url).save()
-            logging.info(f"Logged failure for URL: {url}")
-        except Exception:
-            logging.exception(f"Failed to record failure for URL: {url}")
+            try:
+                product_item = ProductCrawlerFailedItem(**failed_item)
+                product_item.save()
+                logging.info(f"Failed statuscode")
+            except Exception as e:
+                logging.exception(f"Failed to insert")
+
+            return False
 
     def close(self):
         """Close MongoDB connection"""

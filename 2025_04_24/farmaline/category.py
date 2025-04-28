@@ -30,7 +30,7 @@ class Category:
     def start(self):
         response = requests.get(BASE_URL, headers=HEADERS)
         if response.status_code == 200:
-            self.parse_items(response)
+            self.category_parse_items(response)
         else:
             failed_item = {}
             failed_item['category_url'] = BASE_URL
@@ -40,16 +40,18 @@ class Category:
             except Exception:
                 logging.exception("Failed to insert base URL failure record")
 
-    def parse_items(self, response):
-        """Parse main page, extract category links, then process each."""
+    def category_parse_items(self, response):
+        """Parse main page, extract category urls, then process each."""
         selector = Selector(text=response.text)
+        # XPATH
         URL_XPATH = ('//h3[normalize-space(.)="Onze categorieën"]/following-sibling::menu[@id="categories-menu"]//a/@href')
+        # EXTRACT
         category_paths = selector.xpath(URL_XPATH).getall()
         for path in category_paths:
             full_category_url = urljoin(BASE_URL, path)
             response = requests.get(full_category_url, headers=HEADERS)
             if response.status_code == 200:
-                self.category_parse_items(full_category_url, response)
+                self.subcategory_parse_items(full_category_url, response)
             else:
                 failed_item = {}
                 failed_item['category_url'] = full_category_url
@@ -59,33 +61,42 @@ class Category:
                 except Exception:
                     logging.exception(f"Failed to insert failure record for category URL {full_category_url}")
 
-    def category_parse_items(self, category_url, response):
-        """Parse a category page, extract product-list URLs, and insert them."""
+    def subcategory_parse_items(self, category_url, response):
+        """Recursively crawl sub-category pages until no more SUBCATEGORY xpaths are found, then store the final URLs in the category collection."""
         selector = Selector(text=response.text)
-        URL1_XPATH = ('//div[@class="o-PageHeading__all-products-link"]/a[@class="a-link--underline"]/@href')
-        URL2_XPATH = ('//a[@class="a-Button--primary" and normalize-space(.)="Ontdek nu"]/@href')
+        # XPATH
+        SUBCATEGORY_URL1_XPATH = '//ul[@class="o-CmsNavigationList__secondaryNavTree__list a-list-reset"]/li//@href'
+        SUBCATEGORY_URL2_XPATH = '//a[@class="a-Button--primary" and normalize-space(.)="Ontdek nu"]/@href'
 
-        link1 = selector.xpath(URL1_XPATH).get()
-        link2 = selector.xpath(URL2_XPATH).getall()
-        # Combine all found links
-        links = []
-        if link1:
-            links.append(link1)
-        links.extend(link2)
+        # EXTRACT SUBCATEGORY URLS
+        links = selector.xpath(SUBCATEGORY_URL1_XPATH).getall() + selector.xpath(SUBCATEGORY_URL2_XPATH).getall()
 
-        if not links:
-            logging.warning(f"No product link found on {category_url}")
-            return
-
-        for subpath in links:
-            full_link = urljoin(BASE_URL, subpath)
+        if links:
+            # still more subcategories to explore
+            for subpath in links:
+                full_link = urljoin(BASE_URL, subpath)
+                logging.info(f"Descending into {full_link}")
+                subcategory_response = requests.get(full_link, headers=HEADERS)
+                if subcategory_response.status_code == 200:
+                    # recurse on the next level
+                    self.subcategory_parse_items(full_link, subcategory_response)
+                else:
+                    failed_item = {}
+                    failed_item['category_url'] = full_link
+                    ProductCategoryFailedItem(**failed_item).save()
+                    logging.warning(f"Status {subcategory_response.status_code} for {full_link}, logged failure")
+        else:
+            # no deeper subcategories → final category page
             item = {}
-            item['category_url'] = full_link
-            logging.info(f"Saving item: {item}")
+            item['category_url'] =  category_url
+            logging.info(f"Final category found, saving: {category_url}")
             try:
                 ProductCategoryItem(**item).save()
             except NotUniqueError:
-                logging.warning(f"Duplicate URL, skipping: {full_link}")
+                logging.debug(f"Already saved, skipping duplicate: {category_url}")
+            except Exception:
+                logging.exception(f"Failed to save final category URL: {category_url}")
+
 
     def close(self):
         """Close MongoDB connection"""

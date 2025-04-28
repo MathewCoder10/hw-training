@@ -8,7 +8,7 @@ class Crawler:
         self.client = MongoClient(mongo_uri)
         self.db = self.client[db_name]
         self.category_collection = self.db.category_23
-        self.crawler_collection = self.db.crawler_full_new_23
+        self.crawler_collection = self.db.crawler_full_new_24
         self.crawler_collection.create_index("product_url", unique=True)
         
         # Cursor for category documents (with no_cursor_timeout)
@@ -22,32 +22,28 @@ class Crawler:
         self.unique_urls = set()
         
         # Base configuration for cookies and headers
-        self.cookies = {
-            'HEB_AMP_DEVICE_ID': 'h-80dbe4dd-e046-4ec3-8ae4-2e60abfcb7ad',
-            'USER_SELECT_STORE': 'false',
-            'CURR_SESSION_STORE': '92',
-            'sst': 'hs:sst:ANwwI-vkN3Rm81SJ9eobq',
-            'sst.sig': 'CXUmXpu_OrqVnsOuAxpvoPuW4uOQkjRpP16tDygGVG4',
-            'visid_incap_2302070': 'x1xKLuErSbmXQLA42R7/OkaW62cAAAAAQUIPAAAAAABbfEdUQA9C/v1QRTPMfTa6',
-            '_ga': 'GA1.1.68092898.1743492693',
-            '_gcl_au': '1.1.692784280.1743492699',
-            'sessionContext': 'curbside',
-            'incap_ses_769_2302070': 'NzNLVBEsigbv3sw0oAmsCinv+2cAAAAAvnxIBokflRtE5RTvycK9GQ==',
-            'incap_ses_463_2302070': 'PQyEJWTXwkERH/mRQehsBntj/GcAAAAAanW6QhgS9CO0OW5uX2jcIA==',
-            'incap_ses_6551_2302070': 'SzRwBbq96U9uatBhJdTpWryY/GcAAAAAjKaXnq/C/Pg5PxY4S0ygkw==',
-            'incap_ses_710_2302070': 'GCsUSBT9FnLABXKAh23aCbLa/GcAAAAA9VIOO7iJXrPUDMWXA7UrHw==',
-            'reese84': '3:izY5a4tS4ntNq0UrIHVMDg==:A8AhJ3WYaUlFxhlfU8PMNBQ0YQIO2N3FI8pAk9oi4OBIRm4UTPs/st2vwJEWz9wzjN0PN6KYcCQEklnWlFuAXYz3x5MdbXtHYBZKvdgVR/vOMg5hs19TdeB9zRghdEKTOxV0b8+3E5Y8nWLfrraOggtECwEY/ybTO9TW3y2SHp5EjyIGQtz2jirEeHldQOlINqanoCSyRwoge5aBgrmkS99VSbjchJK94dQBb0qoSH0ZlBa9XIhuh+6tz9EN9I0Y71VOwQA9HAhdkJYywf/ofKIvN6sphdb6z/SrbdjY9Z0Cdnl7UurVtOwsionOIA5yA0f/ssNYvF6PyF7JAEOXoKuNx/2xJI4OLxb6GjQNITSZn4r7Xev2D6upp8G5l1kj2AqvNlFiSHVQSJ0dEeRTA4yt3tdWHfSuD6/UB4e7jk5fiRYC+CXsRbiUVALRJNS573wAjwvAi50tOrVXLD6XWQ==:GEFDXqGQIyLtxUOSnI+YNzUNeF88oIKQWNtlMlbx5Gw=',
-            'incap_ses_426_2302070': 'Kg2sfyrLTC+nqgFs8XTpBWHb/GcAAAAAYqbWlogOEECK5ommVnQc/Q==',
-            'DYN_USER_ID': '19653205630',
-            'DYN_USER_CONFIRM': '9b7d2e03882777d1922b1b59f2baface',
-            'JSESSIONID': 'R0GicBAi7uO_96fgVi5JJotnnv8L4mXnLL2Fwtfv',
-            'incap_ses_407_2302070': 'up9WbksuX12a7dSFjfSlBXPb/GcAAAAAM8w/Bp3AGFSinEZknsTJLA==',
-            'AMP_MKTG_760524e2ba': 'JTdCJTIycmVmZXJyZXIlMjIlM0ElMjJodHRwcyUzQSUyRiUyRnd3dy5nb29nbGUuY29tJTJGJTIyJTJDJTIycmVmZXJyaW5nX2RvbWFpbiUyMiUzQSUyMnd3dy5nb29nbGUuY29tJTIyJTdE',
-            'AWSALB': 'IHxQMAdGs9/orWoQRjAsI8j9Avd9W8E4zexX2u/2e6F/nXfN7GR9IN0NZXieBTm89HAN3LFfgTeWG/whF0KqhCpXoydihsafTD7g549eGOq6jAYGI6EwcfwEPdqk',
-            '_ga_WKSH6HYPT4': 'GS1.1.1744624502.5.1.1744624514.0.0.0',
-            'OptanonConsent': 'isGpcEnabled=0&datestamp=Mon+Apr+14+2025+15%3A25%3A17+GMT%2B0530+(India+Standard+Time)&version=202405.2.0&browserGpcFlag=0&isIABGlobal=false&hosts=&consentId=9b5ea69b-7b99-4bc3-8233-9673fa0a6f5f&interactionCount=1&isAnonUser=1&landingPath=NotLandingPage&groups=C0004%3A1&AwaitingReconsent=false',
-            'AMP_760524e2ba': 'JTdCJTIyZGV2aWNlSWQlMjIlM0ElMjJoLTgwZGJlNGRkLWUwNDYtNGVjMy04YWU0LTJlNjBhYmZjYjdhZCUyMiUyQyUyMnNlc3Npb25JZCUyMiUzQTE3NDQ2MjQ1MDA4MTMlMkMlMjJvcHRPdXQlMjIlM0FmYWxzZSUyQyUyMmxhc3RFdmVudFRpbWUlMjIlM0ExNzQ0NjI0NTI2MDg3JTJDJTIybGFzdEV2ZW50SWQlMjIlM0ExNDAlMkMlMjJwYWdlQ291bnRlciUyMiUzQTAlN0Q=',
-        }
+#         self.cookies = {
+#     'HEB_AMP_DEVICE_ID': 'h-c79505c6-24a7-40ab-8a0b-375237ea6554',
+#     'USER_SELECT_STORE': 'false',
+#     'CURR_SESSION_STORE': '92',
+#     'sessionContext': 'curbside',
+#     'sst': 'hs:sst:rJrIe7XfO-oPOYCibAuQ7',
+#     'sst.sig': 'bIAQNyLEqGBSUAamjiiDbxVCD12Tqt2C67LyPsJZrdg',
+#     'visid_incap_2302070': 'U4Tc0q+HQf6I3cteZ8RkayBuCGgAAAAAQUIPAAAAAABj5+GlaiBhBfVGxBmQB917',
+#     'AMP_MKTG_760524e2ba': 'JTdCJTdE',
+#     '_ga': 'GA1.1.652251946.1745382952',
+#     '_gcl_au': '1.1.417985956.1745382962',
+#     'incap_ses_770_2302070': 'mut4f5fHUjjAkwcwIZevCsR+CGgAAAAAkt50kwNo5vdf2XcndgeOLA==',
+#     'DYN_USER_ID': '19696140589',
+#     'DYN_USER_CONFIRM': '82ea587baf1b374715e209a41a19ccf9',
+#     'JSESSIONID': 'bNk4TJVUKFdCRkYiB3nTebIHyTWCSMDjWDQWkqrh',
+#     'incap_ses_706_2302070': '7cFlXtCPohOVF2BwgTfMCbJXCmgAAAAAJm5RNCPD18xXgc+pqCbWUw==',
+#     'reese84': '3:EYDJyhCTlV5E8SBDe+sIMw==:ZJuoBJv+UqnD+QlpyJMb4fsW/rEk9Rdmz6K4jhlR7xBfpnB2h0WBOcAHAtV9U5BrXDcN1igW1GhDRFan2Ecu/qlqfENtfTA5TityxlZlnJw+rLwOqEZOyNAzM3uENvOqVHrj7D8htAoXfFpGuWMuemJoONQa6htsAddLRr9dnBfajGH3LNENWtNG6bPWz9Y3E7ElWka1ryWlmgf9SBtHvhsyj5ScF3H02IPhD8vvxcsu+QG/2wcz8F3BFRr136x8FPigQH4qgUmpb3o8522tC0O/ra4lUjkPHTHm7pUgmp7Rbj5p7J4Q/he41nkM2uLtPsE1R1ypHQBUMugvLiPiI2MZicC+41o/8+/mvRiEfPp7U0TT0H4Avml75srkoq5whNPAj28njiRl5wDyYrSEK+/5BKg7Co84OqO+zNc+WZrmxXaNrsUsHFVFdlmkyENWQjo/v9TUSwZWe52T7bgQ61FluKLkjhdSo2FsO+DE4An5zTe0/blQqEku6KJjswyE:PCbmSZP8sjWfVhlfmHyKaaCjuIH6SbC0lgYcS2H8g50=',
+#     'AWSALB': 'YE1arMyqsEJEHpPef0kGACFx4IdmhYp5A3lyVPoth/GP4lhsGRToRAnoFDu0Y+Lt3Hai6RBesXuFKb19Ndx0mRqwZGxdhZo/IqegHOS/V2P2gFXEqXgEqS15IyLk',
+#     'OptanonConsent': 'isGpcEnabled=0&datestamp=Thu+Apr+24+2025+20%3A55%3A15+GMT%2B0530+(India+Standard+Time)&version=202405.2.0&browserGpcFlag=0&isIABGlobal=false&hosts=&consentId=911b8bed-d060-439d-950a-6dd838411dd7&interactionCount=0&isAnonUser=1&landingPath=NotLandingPage&groups=C0004%3A1&AwaitingReconsent=false',
+#     '_ga_WKSH6HYPT4': 'GS1.1.1745508277.3.1.1745508317.0.0.0',
+#     'AMP_760524e2ba': 'JTdCJTIyZGV2aWNlSWQlMjIlM0ElMjJoLWM3OTUwNWM2LTI0YTctNDBhYi04YTBiLTM3NTIzN2VhNjU1NCUyMiUyQyUyMnNlc3Npb25JZCUyMiUzQTE3NDU1MDgyNzU3MTIlMkMlMjJvcHRPdXQlMjIlM0FmYWxzZSUyQyUyMmxhc3RFdmVudFRpbWUlMjIlM0ExNzQ1NTA4MzE3ODU2JTJDJTIybGFzdEV2ZW50SWQlMjIlM0E1MyUyQyUyMnBhZ2VDb3VudGVyJTIyJTNBMCU3RA==',
+# }
         self.base_headers = {
             'accept': '*/*',
             'accept-language': 'en-US,en;q=0.9',
@@ -79,8 +75,9 @@ class Crawler:
                 # Construct referer and base URL for the category
                 headers = self.base_headers.copy()
                 headers["referer"] = f"https://www.heb.com/category/shop/fruit-vegetables/fruit/{parentId}/{childId}"
-                base_url = f"https://www.heb.com/_next/data/22b50a38e0e0961393883f53de7dad4818a32bee/category/shop/{parentId}/{childId}.json"
+                base_url = f"https://www.heb.com/_next/data/93b02a8323a2031ffa489d005bf4883737edaba8/category/shop/{parentId}/{childId}.json"
                 
+
                 # Process pages for the given category
                 self.parse_items(parentId, childId, base_url, headers)
         finally:
@@ -98,7 +95,7 @@ class Crawler:
             }
 
             print(f"Fetching page {page} for category {parentId}/{childId}...")
-            response = requests.get(base_url, params=params, cookies=self.cookies, headers=headers)
+            response = requests.get(base_url, params=params, headers=headers)
             
             if response.status_code != 200:
                 print(f"Request failed with status code: {response.status_code} for {parentId}/{childId} page {page}")
