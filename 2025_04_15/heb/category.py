@@ -3,7 +3,7 @@ import json
 from pymongo import MongoClient
 
 class Category:
-    def __init__(self, mongo_uri="mongodb://localhost:27017/", db_name="heb_db", collection_name="category_23"):
+    def __init__(self, mongo_uri="mongodb://localhost:27017/", db_name="heb_db", collection_name="category_28"):
         # Initialize MongoDB client, database, and collection
         self.client = MongoClient(mongo_uri)
         self.db = self.client[db_name]

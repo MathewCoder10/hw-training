@@ -7,8 +7,8 @@ class Crawler:
         # MongoDB connection and collections
         self.client = MongoClient(mongo_uri)
         self.db = self.client[db_name]
-        self.category_collection = self.db.category_23
-        self.crawler_collection = self.db.crawler_full_new_24
+        self.category_collection = self.db.category_28
+        self.crawler_collection = self.db.crawler_full_new_28
         self.crawler_collection.create_index("product_url", unique=True)
         
         # Cursor for category documents (with no_cursor_timeout)
