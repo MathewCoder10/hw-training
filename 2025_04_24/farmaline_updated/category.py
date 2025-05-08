@@ -62,15 +62,10 @@ class Category:
                     logging.exception(f"Failed to insert failure record for category URL {full_category_url}")
 
     def subcategory_parse_items(self, category_url):
-        """
-        Iteratively crawl sub-category pages until no more subcategory XPaths are found,
-        then store the final URLs in the category collection.
-        """
-        # XPATH definitions
+        # XPATH 
         SUBCATEGORY_URL1_XPATH = '//ul[@class="o-CmsNavigationList__secondaryNavTree__list a-list-reset"]/li//@href'
         SUBCATEGORY_URL2_XPATH = '//a[@class="a-Button--primary" and normalize-space(.)="Ontdek nu"]/@href'
 
-        # Use a queue to process pages
         queue = deque([category_url])
 
         while queue:
@@ -79,7 +74,7 @@ class Category:
 
             if subcategory_response.status_code == 200:
                 selector = Selector(text=subcategory_response.text)
-                subpaths = (selector.xpath(SUBCATEGORY_URL1_XPATH).extract() +selector.xpath(SUBCATEGORY_URL2_XPATH).extract())
+                subpaths = (selector.xpath(SUBCATEGORY_URL1_XPATH).extract() + selector.xpath(SUBCATEGORY_URL2_XPATH).extract())
 
                 if subpaths:
                     # Enqueue deeper subcategory URLs
