@@ -1,0 +1,3 @@
+Content:
+1) Task to create code that filters orders for active “NY” customers with total order values of at least $1,000, outputs the results to CSV and JSONL, and updates the customer status CSV with each customer’s last order value.
+
