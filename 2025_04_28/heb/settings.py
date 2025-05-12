@@ -30,13 +30,13 @@ FILE_NAME = f"heb_{iteration}"
 # MongoDB Connection (Localhost)
 MONGO_URI = "mongodb://localhost:27017/"
 # MONGO_DB = f"heb_{iteration}"
-MONGO_DB = f"heb_29"
+MONGO_DB = f"heb_12"
 client = MongoClient(MONGO_URI)
 db = client[MONGO_DB]
 
 # Collections
 MONGO_COLLECTION_CATEGORY = f"{PROJECT_NAME}_category"
-MONGO_COLLECTION_CRAWLER = f"{PROJECT_NAME}_crawler"
+MONGO_COLLECTION_CRAWLER = f"{PROJECT_NAME}_crawler12"
 MONGO_COLLECTION_PARSER = f"{PROJECT_NAME}_parser"
 MONGO_COLLECTION_CATEGORY_URL_FAILED = f"{PROJECT_NAME}_category_url_failed"
 MONGO_COLLECTION_CRAWLER_URL_FAILED = f"{PROJECT_NAME}_crawler_url_failed"
