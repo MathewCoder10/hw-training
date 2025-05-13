@@ -20,23 +20,27 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 
 class Crawler:
-    """Crawler that retrieves category listings and product pages."""
-
+    """Crawler that retrieves category listings and product pages."""       
     def __init__(self):
-        self.release_id = None
         connect(db=MONGO_DB, host=MONGO_URI)
         self.database = get_db()
         self.category_collection = self.database[MONGO_COLLECTION_CATEGORY]
 
-        try:
-            dynamic_script_url = self.retrieve_dynamic_script_url()
-            if dynamic_script_url:
-                self.release_id = self.extract_release_id(dynamic_script_url)
+        dynamic_script_url = self.retrieve_dynamic_script_url()
+        if dynamic_script_url:
+            self.release_id = self.extract_release_id(dynamic_script_url)
+            if self.release_id:
                 logging.info(f"Using release ID: {self.release_id}")
             else:
-                logging.error("Unable to locate dynamic script URL.")
-        except Exception:
-            logging.exception("Exception during initialization of release ID.")
+                logging.error("Missing release ID; aborting parser initialization.")
+                # Clean up DB connection before exiting
+                self.close()
+                exit("Initialization failed: Sentry release ID not found.")
+        else:
+            logging.error("Unable to locate dynamic script URL.")
+            # Clean up DB connection before exiting
+            self.close()
+            exit("Initialization failed: dynamic script URL not found.")
 
     def retrieve_dynamic_script_url(self):
         """Launch headless browser to fetch the page and locate the dynamic script URL."""
@@ -61,9 +65,6 @@ class Crawler:
 
     def start(self):
         """Iterate through each category, do the API request, then hand off to parse_items()."""
-        if not self.release_id:
-            logging.error("Missing release ID; aborting crawl.")
-            return
 
         for category in self.category_collection.find():
             url = category.get('url')
@@ -74,27 +75,23 @@ class Crawler:
                 logging.warning(f"Category missing parentId/childId: {url}; skipping.")
                 continue
 
-            page_num = 1
+            page_number = 1
             while True:
-                api_endpoint = (f"{BASE_URL.rstrip('/')}/_next/data/{self.release_id}/category/shop/{parent_id}/{child_id}.json?page={page_num}")
+                api_endpoint = (f"{BASE_URL}/_next/data/{self.release_id}/category/shop/{parent_id}/{child_id}.json?page={page_number}")
                 logging.info(f"Requesting API endpoint: {api_endpoint}")
-
-                # try:
                 response = requests.get(api_endpoint, headers=HEADERS)
+
                 if response.status_code == 200:
-                    json_data = response.json()
-                    has_more = self.parse_items(url, parent_id, child_id, page_num, json_data)
-                    if not has_more:
-                        logging.info(f"Completed crawling for {url} at page {page_num}.")
+                    products = self.parse_items(response, url, parent_id, child_id, page_number)
+                    if products:
+                        page_number += 1
+                    else:
                         break
 
-                    page_num += 1
-
                 else:
-
                     failed_item = {}
                     failed_item ['category'] = url
-                    failed_item ['page'] = page_num
+                    failed_item ['page'] = page_number
                     failed_item ['issue'] = f"{response.status_code}"
                     try:
                         product_failed_item = ProductCrawlerFailedItem(**failed_item)
@@ -102,35 +99,20 @@ class Crawler:
                         logging.info(f"Failed Status code")
                     except Exception as e:
                         logging.exception(f"Failed to insert")
-                    break
 
-
-    def parse_items(self, category_url, parent_id, child_id, page_number, json_data):
-        """
-        Process the JSON payload: recursively find all 'productPageURL' values,
-        save each as a ProductCrawlerItem, and return True if any found.
-        """
-        components = (json_data.get("pageProps", {}).get("layout", {}).get("visualComponents", []))
-        saved_any = False
+    def parse_items(self, response, category_url, parent_id, child_id, page):
+        data = response.json()
+        components = data.get('pageProps', {}).get('layout', {}).get('visualComponents', [])
+        found = False
 
         for component in components:
             for product in component.get("items", []):
-                rel = product.get("productPageURL")
-                if not rel:
-                    failed_item = {}
-                    failed_item ['category'] = category_url
-                    failed_item ['page'] = page_number
-                    failed_item ['issue'] = 'No products'
-                    try:
-                        product_failed_item = ProductCrawlerFailedItem(**failed_item)
-                        product_failed_item.save()
-                        logging.info(f"No products found")
-                    except Exception as e:
-                        logging.exception(f"Failed to insert")
+                url = product.get('productPageURL')
+                if not url:
+                    logging.debug(f"Missing productPageURL in item on {category_url} page {page}")
                     continue
 
-                full_url = (rel if rel.startswith(BASE_URL) else BASE_URL.rstrip('/') + rel )
-
+                full_url = f"{BASE_URL}{url}"
                 item = {}
                 item["product_url"] = full_url
                 item["parentId"] = parent_id
@@ -138,19 +120,27 @@ class Crawler:
                 logging.info(f"Product url saving: {full_url}")
                 try:
                     ProductCrawlerItem(**item).save()
-                    saved_any = True
+                    found = True
                 except NotUniqueError:
                     logging.debug(f"Already saved, skipping duplicate: {full_url}")
                 except Exception:
                     logging.exception(f"Failed to save product url: {full_url}")
-
-        return saved_any
-
+        if not found:
+            failed_item = {}
+            failed_item ['category'] = category_url
+            failed_item ['page'] = page
+            failed_item ['issue'] = 'No products'
+            try:
+                ProductCrawlerFailedItem(**failed_item).save()
+                logging.info(f"No products found")
+            except Exception as e:
+                logging.exception(f"Failed to insert")
+        return found
+    
     def close(self):
         """Clean up database connections."""
         disconnect()
         logging.info("Disconnected from MongoDB.")
-
 
 if __name__ == '__main__':
     crawler = Crawler()

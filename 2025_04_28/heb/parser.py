@@ -1,11 +1,9 @@
 import logging
 import requests
 import re
-from fractions import Fraction
 from parsel import Selector
 from playwright.sync_api import sync_playwright
 from items import ProductParserFailedItem, ProductParserItem
-from datetime import datetime
 from mongoengine import connect, disconnect
 from mongoengine.connection import get_db
 from mongoengine.errors import NotUniqueError
@@ -13,8 +11,6 @@ from settings import (
     MONGO_URI,
     MONGO_DB,
     MONGO_COLLECTION_CRAWLER,
-    MONGO_COLLECTION_PARSER,
-    MONGO_COLLECTION_PARSER_URL_FAILED,
     HEADERS,
     BASE_URL,
     SCRIPT_PATTERN
@@ -27,18 +23,23 @@ class Parser:
         connect(db=MONGO_DB, host=MONGO_URI)
         self.database = get_db()
         self.crawler_collection = self.database[MONGO_COLLECTION_CRAWLER]
-        self.parser_collection = self.database[MONGO_COLLECTION_PARSER]
-        self.failed_urls_collection = self.database[MONGO_COLLECTION_PARSER_URL_FAILED]
 
-        try:
-            dynamic_script_url = self.retrieve_dynamic_script_url()
-            if dynamic_script_url:
-                self.release_id = self.extract_release_id(dynamic_script_url)
+        dynamic_script_url = self.retrieve_dynamic_script_url()
+        if dynamic_script_url:
+            self.release_id = self.extract_release_id(dynamic_script_url)
+            if self.release_id:
                 logging.info(f"Using release ID: {self.release_id}")
             else:
-                logging.error("Unable to locate dynamic script URL.")
-        except Exception:
-            logging.exception("Exception during initialization of release ID.")
+                logging.error("Missing release ID; aborting parser initialization.")
+                # Clean up DB connection before exiting
+                self.close()
+                exit("Initialization failed: Sentry release ID not found.")
+        else:
+            logging.error("Unable to locate dynamic script URL.")
+            # Clean up DB connection before exiting
+            self.close()
+            exit("Initialization failed: dynamic script URL not found.")
+        
 
     def retrieve_dynamic_script_url(self):
         """Launch headless browser to fetch the page and locate the dynamic script URL."""
@@ -62,38 +63,31 @@ class Parser:
         return match.group(1) if match else None
     
     
-    
     def start(self):
         """Iterate through each category, do the API request, then hand off to parse_items()."""
-        if not self.release_id:
-            logging.error("Missing release ID; aborting crawl.")
-            return
-
         for category in self.crawler_collection.find():
             product_url = category.get('product_url')
             product_id = product_url.rstrip('/').split('/')[-1]
-
-            product_details_url = f'https://www.heb.com/_next/data/6ce703410621d0cffdc8972db42c3395d09eee6f/product-detail/{product_id}.json'
+            product_details_url = f'https://www.heb.com/_next/data/{self.release_id}/product-detail/{product_id}.json'
             params = {'productId': product_id}
             response = requests.get(product_details_url, params=params, headers=HEADERS)
             if response.status_code == 200:
                 self.parse_items(response, product_url, product_id)
             else:
                 failed_item = {}
-                failed_item ['unique_id'] = product_id
                 failed_item ['product_url'] = product_url
-                failed_item ['issue'] = response.status_code
+                failed_item ['issue'] = f"{response.status_code}"
                 try:
                     ProductParserFailedItem(**failed_item).save()
                     logging.info(f"Logged failed URL for unique_id {product_id}")
                 except Exception:
                     logging.exception("Failed to log URL failure")
+
         
     def parse_items(self, response, product_url, product_id):
 
         data = response.json()
         product = data["pageProps"]["product"]
-
         product_name = product.get("fullDisplayName",'')
         product_description = product.get("productDescription",'')
         ingredients = product.get("ingredientStatement",'')
@@ -104,91 +98,114 @@ class Parser:
         store = product.get("store", {})
         store_name = store.get("name",'')
         store_addressline1 = store.get("address", {}).get("streetAddress",'')
-        sku = product["SKUs"][0]
+        skus = product.get("SKUs", [])
+        sku  = skus[0] if skus else {}
         upc = sku.get("twelveDigitUPC",'')
-        size_str = sku.get("customerFriendlySize", "")
-        quantity, unit = parse_size(size_str)
-        grammage_quantity = quantity
-        grammage_unit = unit
-        package_size = f"{quantity} {unit}" if quantity and unit else None
-        prices = pick_context(sku["contextPrices"], "CURBSIDE")
-        list_price = prices.get("listPrice", {}).get("amount")
-        sale_price = prices.get("salePrice", {}).get("amount")
+        size = sku.get("customerFriendlySize", "")
+        match = re.search(r'(\d+(?:\.\d+)?|\d+/\d+)\s*([a-zA-Z]+)', size)
+        if match:
+            raw_quantity, raw_unit = match.groups()
+            grammage_quantity = raw_quantity
+            grammage_unit     = raw_unit.strip()
+            package_size      = f"{grammage_quantity} {grammage_unit}"
+
+        else:
+            package_size      = ""
+            grammage_quantity = ""
+            grammage_unit     = ""
+
+        matches = [context_price for context_price in sku.get("contextPrices", []) if context_price.get("context") == "CURBSIDE"]
+        prices  = matches[0] if matches else {}
+        raw_list = prices.get("listPrice", {}).get("amount",0.0)
+        raw_sale = prices.get("salePrice", {}).get("amount",0.0)
+        list_price = float(raw_list)
+        sale_price = float(raw_sale)
         regular_price = list_price
         selling_price = sale_price
         if list_price and sale_price and list_price != sale_price:
-            price_was = list_price
-
-        # Price per unit
+            price_was       = float(list_price)
+            promotion_price = float(sale_price)
+        else:
+            price_was       = None
+            promotion_price = None
+             
         unit_sale = prices.get("unitSalePrice", {})
         if unit_sale:
-            price_per_unit = f"{unit_sale.get('amount')} per {unit_sale.get('unit')}"
+            price_per_unit = f"{unit_sale.get('amount','')} per {unit_sale.get('unit','')}"
 
         coupons = product.get("coupons", [])
         if coupons:
             coupon = coupons[0]
-            promotion_description = coupon.get("description",'')
-            promotion_type = coupon.get("shortDescription",'')
-            promotion_valid_upto = coupon.get("expirationDate",'')
+            promotion_description = coupon.get("description", '')
+            promotion_type        = coupon.get("shortDescription", '')
+            promotion_valid_upto  = coupon.get("expirationDate", '')
+            match = re.search(r'(\d+)%', promotion_type)
+            if match:
+                percentage_discount = match.group(1)  
+            else:
+                percentage_discount = ''
 
-            short_description = coupon.get("shortDescription", "")
-            percent_match = re.search(r'(\d+)%', short_description)
-            if percent_match:
-                percentage_discount = int(percent_match.group(1))
-
+        else:
+            promotion_description = ""
+            promotion_type        = ""
+            promotion_valid_upto  = ""
+            percentage_discount   = ""
         breadcrumb                      = product.get("breadcrumbs", [])
-        producthierarchy_level1     = breadcrumb[0]["title"] if len(breadcrumb) >= 1 else ""
-        producthierarchy_level2     = breadcrumb[1]["title"] if len(breadcrumb) >= 2 else ""
-        producthierarchy_level3     = breadcrumb[2]["title"] if len(breadcrumb) >= 3 else ""
-        producthierarchy_level4     = breadcrumb[3]["title"] if len(breadcrumb) >= 4 else ""
-        producthierarchy_level5     = breadcrumb[4]["title"] if len(breadcrumb) >= 5 else ""
-        producthierarchy_level6     = breadcrumb[5]["title"] if len(breadcrumb) >= 6 else ""
-        producthierarchy_level7     = breadcrumb[6]["title"] if len(breadcrumb) >= 7 else ""
-
-        # ensure last level is the product name (but only up to 7)
-        last_level_index            = len(breadcrumb) + 1
-        if last_level_index <= 7:
-            locals()[f"producthierarchy_level{last_level_index}"] = product_name
-
-        # build the flat breadcrumbs string, including product_name at the end
-        breadcrumbs = " > ".join([breadcrumb.get("title", "") for breadcrumb in breadcrumb] + [product_name])
-
-
-        images          = product.get("carouselImageUrls", [])
-        file_name_1   = f"{product_id}_1.PNG"       if len(images) >= 1 else ""
-        file_name_2   = f"{product_id}_2.PNG"       if len(images) >= 2 else ""
-        file_name_3   = f"{product_id}_3.PNG"       if len(images) >= 3 else ""
-        image_url_1   = images[0]              if len(images) >= 1 else ""
-        image_url_2   = images[1]              if len(images) >= 2 else ""
-        image_url_3   = images[2]              if len(images) >= 3 else ""
-
+        breadcrumb_path = " > ".join(crumb.get("title", "") for crumb in breadcrumb)
+        breadcrumbs = f"{breadcrumb_path} > {product_name}"
+        parts = breadcrumbs.split(" > ")
+        parts += [""] * (7 - len(parts))
+        parts = parts[:7]
+        producthierarchy_level1 = parts[0]
+        producthierarchy_level2 = parts[1]
+        producthierarchy_level3 = parts[2]
+        producthierarchy_level4 = parts[3]
+        producthierarchy_level5 = parts[4]
+        producthierarchy_level6 = parts[5]
+        producthierarchy_level7 = parts[6]
+       
+        image_urls        = product.get("carouselImageUrls", [])
+        stock = product.get("inventory", {}).get("inventoryState",'') 
         preparationInstructions     = product.get("preparationInstructions",'')
         Warning                     = product.get("safetyWarning",'')
-
-        # Nutrition Labels (first label)
-        nutritionLabels             = product.get("nutritionLabels", [])
-        if nutritionLabels:
-            nutrition                 = nutritionLabels[0]
-            servings_per_pack         = nutrition.get("servingsPerContainer",'')
-            nutrients                 = nutrition.get("nutrients", [])
-            vitamins                  = nutrition.get("vitaminsAndMinerals", [])
-            combined_nutrition        = nutrients + vitamins
-            nutritional_information   = ",".join(
-                f"{n['title']}:{n.get('unit','')}:{n.get('percentage','')}"
-                for n in combined_nutrition if 'title' in n
+        nutrition_labels = product.get("nutritionLabels", [])
+        if nutrition_labels:
+            nutrition = nutrition_labels[0]
+            servings_per_pack = nutrition.get("servingsPerContainer", "")
+            
+            nutrients = nutrition.get("nutrients", [])
+            vitamins  = nutrition.get("vitaminsAndMinerals", [])
+            combined = nutrients + vitamins
+            nutritional_information = ",".join(
+                f"{item['title']}:{item.get('unit','')}:{item.get('percentage','')}"
+                for item in combined
+                if "title" in item
             )
-            vitamins_list             = [v["title"] for v in vitamins]
+            vitamin_titles = [v["title"] for v in vitamins if "title" in v]
+            vitamin = ",".join(vitamin_titles) if vitamin_titles else ""
         else:
-            servings_per_pack         = None
-            nutritional_information   = ""
-            vitamins_list             = []
+            servings_per_pack       = ""
+            nutritional_information = ""
+            vitamin                 = ""
 
-
-
+        
         item = {}
         item['unique_id']             = unique_id
         item['competitor_name']       = 'heb'
         item['product_name']          = product_name
+        item['product_unique_key']    = product_unique_key
+        item['store_name']            = store_name
+        item['store_addressline1']    = store_addressline1
+        item['upc']                   = upc
+        item['package_size']          = package_size
+        item['breadcrumb']            = breadcrumbs
+        item['producthierarchy_level1'] = producthierarchy_level1
+        item['producthierarchy_level2'] = producthierarchy_level2
+        item['producthierarchy_level3'] = producthierarchy_level3
+        item['producthierarchy_level4'] = producthierarchy_level4
+        item['producthierarchy_level5'] = producthierarchy_level5
+        item['producthierarchy_level6'] = producthierarchy_level6
+        item['producthierarchy_level7'] = producthierarchy_level7
         item['brand']                 = brand
         item['pdp_url']               = pdp_url
         item['currency']              = 'EUR'
@@ -197,45 +214,37 @@ class Parser:
         item['promotion_price']       = promotion_price
         item['price_was']             = price_was
         item['percentage_discount']   = percentage_discount
+        item['promotion_description'] = promotion_description
+        item['promotion_type']        = promotion_type
+        item['promotion_valid_upto']  = promotion_valid_upto
         item['product_description']   = product_description
-        item['grammage_quantity']     = grammage_quantity
+        item['grammage_quantity'] = grammage_quantity
         item['grammage_unit']         = grammage_unit
         item['price_per_unit']        = price_per_unit
         item['image_urls']            = ','.join(image_urls)
-        item['storage_instructions']  = ','.join(storage_instructions)
-        item['reviews']               = reviews
-        item['rating']                = rating
-        item['product_code']          = product_code
-        item['variants']              = ','.join(variant)
-        item['manufacturer']          = manufacturer
-        item['net_content']           = net_content
-        item['dosage_recommendation'] = dosage_recommendation
-        item['ingredients']           = ','.join(ingredients)
+        item['instock']               = stock
+        item['preparation_instructions'] = preparationInstructions
+        item['warning']               = Warning
+        item['servings_per_pack']     = servings_per_pack
+        item['nutritional_information'] = nutritional_information
+        item['vitamins']              = vitamin
+        item['ingredients']           = ingredients
 
-    def parse_size(size_str):
-        """
-        Extract quantity and unit from size strings like:
-        "Avg. 2.0 lbs", "About 1/2 gal", "8 ct", "2.25 oz"
-        """
-        match = re.search(r'(\d+(?:\.\d+)?|\d+/\d+)\s*([a-zA-Z]+)', size_str)
-        if not match:
-            return None, None
-
-        qty_raw, unit = match.groups()
+        logging.info(item)
         try:
-            qty = float(Fraction(qty_raw))  # handles both "2.0" and "1/2"
-        except ValueError:
-            qty = None
-
-        return qty, unit.strip()
-
-    def pick_context(ctx_list, context="CURBSIDE"):
-        for c in ctx_list:
-            if c.get("context") == context:
-                return c
-        return {}
-        
+            product_item = ProductParserItem(**item)
+            product_item.save()
+        except NotUniqueError:
+            logging.warning(f"Duplicate unique_id found for ID: {unique_id}")
+        except Exception as e:
+            logging.exception(f"Failed to save product item for URL: {pdp_url}")
 
 
-        
+    def close(self):
+        disconnect()
+        logging.info("MongoDB connection closed.")
 
+if __name__ == '__main__':
+    parser = Parser()
+    parser.start()
+    parser.close()
