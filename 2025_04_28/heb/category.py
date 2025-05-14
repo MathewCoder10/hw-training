@@ -19,7 +19,11 @@ class Category:
         # Connect to MongoDB
         connect(db=MONGO_DB, host=MONGO_URI)
         self.database = get_db()
-        self.json_data = {
+
+    def start(self):
+        """Send the POST request and parse the JSON response."""
+        base_url = f'{BASE_URL}/graphql'
+        json_data = {
             'operationName': 'ShopNavigation',
             'variables': {},
             'extensions': {
@@ -29,11 +33,7 @@ class Category:
                 },
             },
         }
-
-    def start(self):
-        """Send the POST request and parse the JSON response."""
-        base_url = f'{BASE_URL}/graphql'
-        response = requests.post(base_url, headers=HEADERS, json=self.json_data)
+        response = requests.post(base_url, headers=HEADERS, json=json_data)
         if response.status_code == 200:
             self.parse_items(response)
         else:
