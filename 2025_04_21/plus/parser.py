@@ -161,7 +161,7 @@ class Parser:
         regular_price = float(overview.get('Price', 0))  
         unique_id = sku
         product_name = product_name
-        promotion = self.promotion(unique_id, product_name, regular_price) #doubt
+        promotion = self.promotion(unique_id, product_name, regular_price)
         category_level = overview.get('Categories', {}).get('List', [])
         levels = ['Home', 'Producten'] + [lvl.get('Name', '') for lvl in category_level[:3]]
         breadcrumb = ' > '.join([lvl for lvl in levels if lvl])
